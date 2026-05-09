@@ -24,6 +24,9 @@ jobs:
           distribution: temurin
           java-version: "21"
 
+      - name: Ensure Gradle wrapper is executable
+        run: chmod +x gradlew
+
       - name: Validate build
         run: ./gradlew check
 
@@ -40,6 +43,9 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+
+      - name: Ensure Gradle wrapper is executable
+        run: chmod +x gradlew
 
       - name: Run e2e test task
         run: ./gradlew e2eTest
