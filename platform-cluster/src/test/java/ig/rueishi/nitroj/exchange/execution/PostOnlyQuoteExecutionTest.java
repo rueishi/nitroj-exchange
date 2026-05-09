@@ -162,6 +162,113 @@ final class PostOnlyQuoteExecutionTest {
     }
 
     @Test
+    void twoQuoteParentsFromOneMarketMaker_remainIndependentlyActive() {
+        final Harness harness = new Harness(RiskDecision.APPROVED, 8, 8);
+
+        harness.strategy.onParentIntent(intent(PARENT_ID, CHILD_ID, PRICE, Ids.VENUE_COINBASE,
+            Ids.INSTRUMENT_BTC_USD, Side.BUY));
+        harness.strategy.onParentIntent(intent(PARENT_ID + 1L, CHILD_ID + 1L, PRICE + 10L, Ids.VENUE_COINBASE,
+            Ids.INSTRUMENT_BTC_USD, Side.SELL));
+
+        assertThat(harness.registry.parentOrderIdByChild(CHILD_ID)).isEqualTo(PARENT_ID);
+        assertThat(harness.registry.parentOrderIdByChild(CHILD_ID + 1L)).isEqualTo(PARENT_ID + 1L);
+        assertThat(harness.registry.lookup(PARENT_ID).status()).isEqualTo(ParentOrderState.WORKING);
+        assertThat(harness.registry.lookup(PARENT_ID + 1L).status()).isEqualTo(ParentOrderState.WORKING);
+    }
+
+    @Test
+    void fourQuoteParentsAcrossCoinbaseAndBinance_refreshOnlyMatchingVenue() {
+        final Harness harness = new Harness(RiskDecision.APPROVED, 8, 8);
+        submitFourVenueQuotes(harness);
+
+        harness.strategy.onMarketDataTick(Ids.VENUE_COINBASE, Ids.INSTRUMENT_BTC_USD, 100L);
+
+        assertThat(harness.strategy.refreshTriggers()).isEqualTo(2L);
+        assertThat(harness.registry.lookup(PARENT_ID).status()).isEqualTo(ParentOrderState.CANCEL_PENDING);
+        assertThat(harness.registry.lookup(PARENT_ID + 1L).status()).isEqualTo(ParentOrderState.CANCEL_PENDING);
+        assertThat(harness.registry.lookup(PARENT_ID + 2L).status()).isEqualTo(ParentOrderState.WORKING);
+        assertThat(harness.registry.lookup(PARENT_ID + 3L).status()).isEqualTo(ParentOrderState.WORKING);
+        assertThat(harness.orderManager.getStatus(CHILD_ID + 20L)).isEqualTo(OrderStatus.PENDING_NEW);
+        assertThat(harness.orderManager.getStatus(CHILD_ID + 30L)).isEqualTo(OrderStatus.PENDING_NEW);
+    }
+
+    @Test
+    void parentCancel_isScopedToOneParent() {
+        final Harness harness = new Harness(RiskDecision.APPROVED, 8, 8);
+        submitFourVenueQuotes(harness);
+
+        harness.strategy.onCancel(PARENT_ID + 2L, ParentOrderState.REASON_CANCELED_BY_PARENT);
+        harness.strategy.onChildExecution(child(event(CHILD_ID + 20L, ExecType.CANCELED, 0L, 0L, 0L, QTY,
+            true, "bn-cx-1", Ids.VENUE_BINANCE, Ids.INSTRUMENT_BTC_USDT, Side.BUY), PARENT_ID + 2L));
+
+        assertThat(harness.registry.lookup(PARENT_ID + 2L).status()).isEqualTo(ParentOrderState.CANCELED);
+        assertThat(harness.registry.lookup(PARENT_ID).status()).isEqualTo(ParentOrderState.WORKING);
+        assertThat(harness.registry.lookup(PARENT_ID + 1L).status()).isEqualTo(ParentOrderState.WORKING);
+        assertThat(harness.registry.lookup(PARENT_ID + 3L).status()).isEqualTo(ParentOrderState.WORKING);
+        assertThat(harness.strategy.parentCancels()).isEqualTo(1L);
+    }
+
+    @Test
+    void postOnlyRejectRetry_isScopedToOneParent() {
+        final Harness harness = new Harness(RiskDecision.APPROVED, 8, 8);
+        submitFourVenueQuotes(harness);
+
+        harness.strategy.onChildExecution(child(event(CHILD_ID + 20L, ExecType.REJECTED, 0L, 0L, 0L, QTY,
+            true, "bn-rej-1", Ids.VENUE_BINANCE, Ids.INSTRUMENT_BTC_USDT, Side.BUY), PARENT_ID + 2L));
+
+        assertThat(harness.strategy.retrySubmissions()).isEqualTo(1L);
+        assertThat(harness.registry.parentOrderIdByChild(CHILD_ID)).isEqualTo(PARENT_ID);
+        assertThat(harness.registry.parentOrderIdByChild(CHILD_ID + 30L)).isEqualTo(PARENT_ID + 3L);
+        assertThat(harness.registry.parentOrderIdByChild(CHILD_ID + 21L)).isEqualTo(PARENT_ID + 2L);
+        assertThat(newOrder(harness.commandBuffer).venueId()).isEqualTo(Ids.VENUE_BINANCE);
+        assertThat(newOrder(harness.commandBuffer).instrumentId()).isEqualTo(Ids.INSTRUMENT_BTC_USDT);
+    }
+
+    @Test
+    void finalFill_releasesOnlyFilledParent() {
+        final Harness harness = new Harness(RiskDecision.APPROVED, 8, 8);
+        submitFourVenueQuotes(harness);
+
+        harness.strategy.onChildExecution(child(event(CHILD_ID, ExecType.FILL, PRICE, QTY, QTY, 0L,
+            true, "cb-fill-final", Ids.VENUE_COINBASE, Ids.INSTRUMENT_BTC_USD, Side.BUY), PARENT_ID));
+
+        assertThat(harness.registry.lookup(PARENT_ID).status()).isEqualTo(ParentOrderState.DONE);
+        assertThat(harness.registry.lookup(PARENT_ID + 1L).status()).isEqualTo(ParentOrderState.WORKING);
+        assertThat(harness.registry.lookup(PARENT_ID + 2L).status()).isEqualTo(ParentOrderState.WORKING);
+        assertThat(harness.strategy.fills()).isEqualTo(1L);
+
+        harness.strategy.onParentIntent(intent(PARENT_ID + 4L, CHILD_ID + 40L, PRICE, Ids.VENUE_COINBASE,
+            Ids.INSTRUMENT_BTC_USD, Side.BUY));
+        assertThat(harness.registry.lookup(PARENT_ID + 4L).status()).isEqualTo(ParentOrderState.WORKING);
+    }
+
+    @Test
+    void missingParentCallbacks_areDroppedAndCounted() {
+        final Harness harness = submittedHarness(RiskDecision.APPROVED, 4, 4);
+
+        harness.strategy.onChildExecution(child(event(CHILD_ID + 99L, ExecType.NEW, 0L, 0L, 0L, QTY,
+            false, "missing-new"), PARENT_ID + 99L));
+        harness.strategy.onCancel(PARENT_ID + 99L, ParentOrderState.REASON_CANCELED_BY_PARENT);
+
+        assertThat(harness.strategy.missingCallbackDrops()).isEqualTo(2L);
+        assertThat(harness.registry.lookup(PARENT_ID).status()).isEqualTo(ParentOrderState.WORKING);
+    }
+
+    @Test
+    void strategySlotCapacityFull_failsSecondParentDeterministically() {
+        final Harness harness = new Harness(RiskDecision.APPROVED, 4, 4, 1);
+
+        harness.strategy.onParentIntent(intent(PARENT_ID, CHILD_ID, PRICE));
+        harness.strategy.onParentIntent(intent(PARENT_ID + 1L, CHILD_ID + 1L, PRICE));
+
+        assertThat(harness.registry.lookup(PARENT_ID).status()).isEqualTo(ParentOrderState.WORKING);
+        assertThat(harness.registry.lookup(PARENT_ID + 1L).status()).isEqualTo(ParentOrderState.FAILED);
+        assertThat(harness.registry.lookup(PARENT_ID + 1L).terminalReasonCode())
+            .isEqualTo(ParentOrderState.REASON_CAPACITY_REJECTED);
+        assertThat(harness.strategy.capacityRejects()).isEqualTo(1L);
+    }
+
+    @Test
     void replay_sameRefreshSequenceMatchesState() {
         final Harness first = submittedHarness(RiskDecision.APPROVED, 4, 4);
         final Harness second = submittedHarness(RiskDecision.APPROVED, 4, 4);
@@ -199,6 +306,17 @@ final class PostOnlyQuoteExecutionTest {
     }
 
     private static ParentOrderIntentView intent(final long parentOrderId, final long childOrderId, final long price) {
+        return intent(parentOrderId, childOrderId, price, Ids.VENUE_COINBASE, Ids.INSTRUMENT_BTC_USD, Side.BUY);
+    }
+
+    private static ParentOrderIntentView intent(
+        final long parentOrderId,
+        final long childOrderId,
+        final long price,
+        final int venueId,
+        final int instrumentId,
+        final Side side
+    ) {
         final UnsafeBuffer buffer = new UnsafeBuffer(new byte[256]);
         new ParentOrderIntentEncoder()
             .wrapAndApplyHeader(buffer, 0, new MessageHeaderEncoder())
@@ -206,9 +324,9 @@ final class PostOnlyQuoteExecutionTest {
             .strategyId((short) Ids.STRATEGY_MARKET_MAKING)
             .executionStrategyId(ExecutionStrategyIds.POST_ONLY_QUOTE)
             .intentType(ParentIntentType.QUOTE)
-            .side(Side.BUY)
-            .instrumentId(Ids.INSTRUMENT_BTC_USD)
-            .primaryVenueId(Ids.VENUE_COINBASE)
+            .side(side)
+            .instrumentId(instrumentId)
+            .primaryVenueId(venueId)
             .secondaryVenueId(0)
             .quantityScaled(QTY)
             .priceMode(PriceMode.LIMIT)
@@ -253,16 +371,33 @@ final class PostOnlyQuoteExecutionTest {
         final boolean isFinal,
         final String execId
     ) {
+        return event(childClOrdId, execType, fillPrice, fillQty, cumQty, leavesQty, isFinal, execId,
+            Ids.VENUE_COINBASE, Ids.INSTRUMENT_BTC_USD, Side.BUY);
+    }
+
+    private static ExecutionEventDecoder event(
+        final long childClOrdId,
+        final ExecType execType,
+        final long fillPrice,
+        final long fillQty,
+        final long cumQty,
+        final long leavesQty,
+        final boolean isFinal,
+        final String execId,
+        final int venueId,
+        final int instrumentId,
+        final Side side
+    ) {
         final UnsafeBuffer buffer = new UnsafeBuffer(new byte[256]);
         final byte[] venueOrderId = ("venue-" + childClOrdId).getBytes(StandardCharsets.US_ASCII);
         final byte[] execIdBytes = execId.getBytes(StandardCharsets.US_ASCII);
         new ExecutionEventEncoder()
             .wrapAndApplyHeader(buffer, 0, new MessageHeaderEncoder())
             .clOrdId(childClOrdId)
-            .venueId(Ids.VENUE_COINBASE)
-            .instrumentId(Ids.INSTRUMENT_BTC_USD)
+            .venueId(venueId)
+            .instrumentId(instrumentId)
             .execType(execType)
-            .side(Side.BUY)
+            .side(side)
             .fillPriceScaled(fillPrice)
             .fillQtyScaled(fillQty)
             .cumQtyScaled(cumQty)
@@ -279,6 +414,17 @@ final class PostOnlyQuoteExecutionTest {
         return decoder;
     }
 
+    private static void submitFourVenueQuotes(final Harness harness) {
+        harness.strategy.onParentIntent(intent(PARENT_ID, CHILD_ID, PRICE, Ids.VENUE_COINBASE,
+            Ids.INSTRUMENT_BTC_USD, Side.BUY));
+        harness.strategy.onParentIntent(intent(PARENT_ID + 1L, CHILD_ID + 10L, PRICE + 10L, Ids.VENUE_COINBASE,
+            Ids.INSTRUMENT_BTC_USD, Side.SELL));
+        harness.strategy.onParentIntent(intent(PARENT_ID + 2L, CHILD_ID + 20L, PRICE, Ids.VENUE_BINANCE,
+            Ids.INSTRUMENT_BTC_USDT, Side.BUY));
+        harness.strategy.onParentIntent(intent(PARENT_ID + 3L, CHILD_ID + 30L, PRICE + 10L, Ids.VENUE_BINANCE,
+            Ids.INSTRUMENT_BTC_USDT, Side.SELL));
+    }
+
     private static CountersManager counters() {
         return new CountersManager(new UnsafeBuffer(new byte[1024 * 1024]), new UnsafeBuffer(new byte[64 * 1024]));
     }
@@ -287,10 +433,20 @@ final class PostOnlyQuoteExecutionTest {
         final ParentOrderRegistry registry;
         final OrderManagerImpl orderManager = new OrderManagerImpl();
         final UnsafeBuffer commandBuffer = new UnsafeBuffer(new byte[1024]);
-        final PostOnlyQuoteExecution strategy = new PostOnlyQuoteExecution();
+        final PostOnlyQuoteExecution strategy;
 
         Harness(final RiskDecision riskDecision, final int parentCapacity, final int childCapacity) {
+            this(riskDecision, parentCapacity, childCapacity, PostOnlyQuoteExecution.DEFAULT_ACTIVE_PARENT_CAPACITY);
+        }
+
+        Harness(
+            final RiskDecision riskDecision,
+            final int parentCapacity,
+            final int childCapacity,
+            final int activeParentCapacity
+        ) {
             registry = new ParentOrderRegistry(parentCapacity, childCapacity);
+            strategy = new PostOnlyQuoteExecution(activeParentCapacity);
             strategy.init(new ExecutionStrategyContext(
                 new InternalMarketView(),
                 new RiskStub(riskDecision),

@@ -234,6 +234,16 @@ public final class OrderManagerImpl implements OrderManager {
     }
 
     @Override
+    public void forEachLiveOrder(final int venueId, final LiveOrderConsumer consumer) {
+        Objects.requireNonNull(consumer, "consumer");
+        for (OrderState order : liveOrders.values()) {
+            if (order.venueId == venueId && !OrderStatus.isTerminal(order.status)) {
+                consumer.onLiveOrder(order);
+            }
+        }
+    }
+
+    @Override
     public void forceTransitionToCanceled(final long clOrdId) {
         final OrderState order = liveOrders.get(clOrdId);
         if (order != null) {

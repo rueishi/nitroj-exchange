@@ -197,6 +197,19 @@ final class ArbStrategyTest {
     }
 
     @Test
+    void synchronousSubmitReject_resetsArbStateAndAppliesCooldown() {
+        final Harness harness = harness(config(1, 0L), false);
+        seedOpportunity(harness);
+
+        trigger(harness);
+
+        assertThat(harness.strategy.arbActive()).isFalse();
+        assertThat(harness.strategy.arbAttemptId()).isZero();
+        assertThat(harness.strategy.cooldownUntilMicros()).isGreaterThan(harness.cluster.time);
+        assertThat(harness.order.orders).isEmpty();
+    }
+
+    @Test
     void netProfitFormula_includesFeesAndSlippage() {
         final Harness harness = harness(config(1, 0L));
         seedOpportunity(harness);
@@ -367,6 +380,10 @@ final class ArbStrategyTest {
     }
 
     static Harness harness(final ArbStrategyConfig config) {
+        return harness(config, true);
+    }
+
+    static Harness harness(final ArbStrategyConfig config, final boolean allowCompatibility) {
         final InternalMarketView marketView = new InternalMarketView();
         final RecordingRisk risk = new RecordingRisk();
         final RecordingOrder order = new RecordingOrder();
@@ -375,7 +392,9 @@ final class ArbStrategyTest {
         final ExecutionStrategyRegistry executionRegistry = new ExecutionStrategyRegistry(8, 8);
         final RecordingExecutionStrategy executionStrategy = new RecordingExecutionStrategy(order, cluster);
         executionRegistry.register(executionStrategy);
-        executionRegistry.allowCompatibility(Ids.STRATEGY_ARB, ExecutionStrategyIds.MULTI_LEG_CONTINGENT);
+        if (allowCompatibility) {
+            executionRegistry.allowCompatibility(Ids.STRATEGY_ARB, ExecutionStrategyIds.MULTI_LEG_CONTINGENT);
+        }
         final ExecutionStrategyEngine executionEngine = new ExecutionStrategyEngine(
             executionRegistry,
             new ExecutionStrategyContext(

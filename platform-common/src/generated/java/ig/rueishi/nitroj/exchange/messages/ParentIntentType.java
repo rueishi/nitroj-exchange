@@ -12,6 +12,8 @@ public enum ParentIntentType
 
     CANCEL_PARENT((byte)4),
 
+    HEDGE((byte)5),
+
     /**
      * To be used to represent not present or null.
      */
@@ -48,6 +50,7 @@ public enum ParentIntentType
             case 2: return QUOTE;
             case 3: return MULTI_LEG;
             case 4: return CANCEL_PARENT;
+            case 5: return HEDGE;
             case -128: return NULL_VAL;
         }
 

@@ -29,6 +29,9 @@ public final class ParentOrderState {
     public static final byte REASON_KILL_SWITCH = 7;
     public static final byte REASON_EXECUTION_ABORTED = 8;
     public static final byte REASON_CAPACITY_REJECTED = 9;
+    public static final byte REASON_LEG_TIMER_RESIDUAL_CANCELED = 10;
+    public static final byte REASON_ALL_CHILDREN_REJECTED = 11;
+    public static final byte REASON_RESLICE_FAILED = 12;
 
     long parentOrderId;
     int strategyId;

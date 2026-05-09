@@ -256,6 +256,23 @@ final class MarketMakingStrategyTest {
     }
 
     @Test
+    void synchronousSubmitReject_doesNotRecordLiveParentAndSuppresses() {
+        final Harness harness = harness(config(), false);
+
+        quote(harness, 99_900L * Ids.SCALE, 100_100L * Ids.SCALE);
+
+        assertThat(harness.strategy.liveBidClOrdId()).isZero();
+        assertThat(harness.strategy.liveAskClOrdId()).isZero();
+        assertThat(harness.strategy.parentSubmitRejects()).isEqualTo(2L);
+        assertThat(harness.strategy.suppressedUntilMicros()).isEqualTo(harness.cluster.time + 5_000_000L);
+    }
+
+    @Test
+    void synchronousSubmitReject_replayDeterministicState() {
+        assertThat(submitRejectSummary()).isEqualTo(submitRejectSummary());
+    }
+
+    @Test
     void lastTradePrice_updatedFromTradeTick_andNotFromBidAsk() {
         final Harness harness = harness(config());
 
@@ -305,6 +322,10 @@ final class MarketMakingStrategyTest {
     }
 
     static Harness harness(final MarketMakingConfig config) {
+        return harness(config, true);
+    }
+
+    static Harness harness(final MarketMakingConfig config, final boolean allowCompatibility) {
         final InternalMarketView marketView = new InternalMarketView();
         final RecordingRisk risk = new RecordingRisk();
         final RecordingOrder order = new RecordingOrder();
@@ -315,7 +336,9 @@ final class MarketMakingStrategyTest {
         final ExecutionStrategyRegistry executionRegistry = new ExecutionStrategyRegistry(8, 8);
         final RecordingExecutionStrategy executionStrategy = new RecordingExecutionStrategy(order, cluster);
         executionRegistry.register(executionStrategy);
-        executionRegistry.allowCompatibility(Ids.STRATEGY_MARKET_MAKING, ExecutionStrategyIds.POST_ONLY_QUOTE);
+        if (allowCompatibility) {
+            executionRegistry.allowCompatibility(Ids.STRATEGY_MARKET_MAKING, ExecutionStrategyIds.POST_ONLY_QUOTE);
+        }
         final ExecutionStrategyEngine executionEngine = new ExecutionStrategyEngine(
             executionRegistry,
             new ExecutionStrategyContext(
@@ -341,6 +364,13 @@ final class MarketMakingStrategyTest {
             new ig.rueishi.nitroj.exchange.messages.NewOrderCommandEncoder(),
             new ig.rueishi.nitroj.exchange.messages.CancelOrderCommandEncoder(), null, null));
         return new Harness(strategy, marketView, risk, order, portfolio, recovery, cluster, executionStrategy);
+    }
+
+    static String submitRejectSummary() {
+        final Harness harness = harness(config(), false);
+        quote(harness, 99_900L * Ids.SCALE, 100_100L * Ids.SCALE);
+        return harness.strategy.liveBidClOrdId() + ":" + harness.strategy.liveAskClOrdId()
+            + ":" + harness.strategy.parentSubmitRejects() + ":" + harness.strategy.suppressedUntilMicros();
     }
 
     static void quote(final Harness harness, final long bid, final long ask) {

@@ -76,8 +76,14 @@ public class LogonEncoder implements AbstractLogonEncoder
     private static final int resetSeqNumFlagHeaderLength = 4;
     private static final byte[] resetSeqNumFlagHeader = new byte[] {49, 52, 49, (byte) '='};
 
+    private static final int usernameHeaderLength = 4;
+    private static final byte[] usernameHeader = new byte[] {53, 53, 51, (byte) '='};
+
     private static final int passwordHeaderLength = 4;
     private static final byte[] passwordHeader = new byte[] {53, 53, 52, (byte) '='};
+
+    private static final int messageHandlingHeaderLength = 6;
+    private static final byte[] messageHandlingHeader = new byte[] {50, 53, 48, 51, 53, (byte) '='};
 
     private static final int cancelOrdersOnDisconnectHeaderLength = 5;
     private static final byte[] cancelOrdersOnDisconnectHeader = new byte[] {56, 48, 49, 51, (byte) '='};
@@ -203,6 +209,132 @@ public class LogonEncoder implements AbstractLogonEncoder
     public boolean resetSeqNumFlag()
     {
         return resetSeqNumFlag;
+    }
+
+    private final MutableDirectBuffer username = new UnsafeBuffer();
+    private byte[] usernameInternalBuffer = username.byteArray();
+    private int usernameOffset = 0;
+    private int usernameLength = 0;
+
+    /* Username = 553 */
+    public LogonEncoder username(final DirectBuffer value, final int offset, final int length)
+    {
+        username.wrap(value);
+        usernameOffset = offset;
+        usernameLength = length;
+        return this;
+    }
+
+    /* Username = 553 */
+    public LogonEncoder username(final DirectBuffer value, final int length)
+    {
+        return username(value, 0, length);
+    }
+
+    /* Username = 553 */
+    public LogonEncoder username(final DirectBuffer value)
+    {
+        return username(value, 0, value.capacity());
+    }
+
+    /* Username = 553 */
+    public LogonEncoder username(final byte[] value, final int offset, final int length)
+    {
+        username.wrap(value);
+        usernameOffset = offset;
+        usernameLength = length;
+        return this;
+    }
+
+    /* Username = 553 */
+    public LogonEncoder usernameAsCopy(final byte[] value, final int offset, final int length)
+    {
+        if (copyInto(username, value, offset, length))
+        {
+            usernameInternalBuffer = username.byteArray();
+        }
+        usernameOffset = 0;
+        usernameLength = length;
+        return this;
+    }
+
+    /* Username = 553 */
+    public LogonEncoder username(final byte[] value, final int length)
+    {
+        return username(value, 0, length);
+    }
+
+    /* Username = 553 */
+    public LogonEncoder username(final byte[] value)
+    {
+        return username(value, 0, value.length);
+    }
+
+    /* Username = 553 */
+    public boolean hasUsername()
+    {
+        return usernameLength > 0;
+    }
+
+    /* Username = 553 */
+    public MutableDirectBuffer username()
+    {
+        return username;
+    }
+
+    /* Username = 553 */
+    public String usernameAsString()
+    {
+        return username.getStringWithoutLengthAscii(usernameOffset, usernameLength);
+    }
+
+    /* Username = 553 */
+    public LogonEncoder username(final CharSequence value)
+    {
+        if (toBytes(value, username))
+        {
+            usernameInternalBuffer = username.byteArray();
+        }
+        usernameOffset = 0;
+        usernameLength = value.length();
+        return this;
+    }
+
+    /* Username = 553 */
+    public LogonEncoder username(final AsciiSequenceView value)
+    {
+        final DirectBuffer buffer = value.buffer();
+        if (buffer != null)
+        {
+            username.wrap(buffer);
+            usernameOffset = value.offset();
+            usernameLength = value.length();
+        }
+        return this;
+    }
+
+    /* Username = 553 */
+    public LogonEncoder username(final char[] value)
+    {
+        return username(value, 0, value.length);
+    }
+
+    /* Username = 553 */
+    public LogonEncoder username(final char[] value, final int length)
+    {
+        return username(value, 0, length);
+    }
+
+    /* Username = 553 */
+    public LogonEncoder username(final char[] value, final int offset, final int length)
+    {
+        if (toBytes(value, username, offset, length))
+        {
+            usernameInternalBuffer = username.byteArray();
+        }
+        usernameOffset = 0;
+        usernameLength = length;
+        return this;
     }
 
     private final MutableDirectBuffer password = new UnsafeBuffer();
@@ -331,6 +463,29 @@ public class LogonEncoder implements AbstractLogonEncoder
         return this;
     }
 
+    private int messageHandling;
+
+    private boolean hasMessageHandling;
+
+    public boolean hasMessageHandling()
+    {
+        return hasMessageHandling;
+    }
+
+    /* MessageHandling = 25035 */
+    public LogonEncoder messageHandling(int value)
+    {
+        messageHandling = value;
+        hasMessageHandling = true;
+        return this;
+    }
+
+    /* MessageHandling = 25035 */
+    public int messageHandling()
+    {
+        return messageHandling;
+    }
+
     private char cancelOrdersOnDisconnect;
 
     private boolean hasCancelOrdersOnDisconnect;
@@ -362,82 +517,9 @@ public class LogonEncoder implements AbstractLogonEncoder
     {
         throw new UnsupportedOperationException();
     }
-    public LogonEncoder username(final DirectBuffer value, final int offset, final int length)
+    public boolean supportsUsername()
     {
-        throw new UnsupportedOperationException();
-    }
-
-    public LogonEncoder username(final DirectBuffer value, final int length)
-    {
-        throw new UnsupportedOperationException();
-    }
-
-    public LogonEncoder username(final DirectBuffer value)
-    {
-        throw new UnsupportedOperationException();
-    }
-
-    public LogonEncoder username(final byte[] value, final int offset, final int length)
-    {
-        throw new UnsupportedOperationException();
-    }
-
-    public LogonEncoder username(final byte[] value, final int length)
-    {
-        throw new UnsupportedOperationException();
-    }
-
-    public LogonEncoder username(final byte[] value)
-    {
-        throw new UnsupportedOperationException();
-    }
-
-    public boolean hasUsername()
-    {
-        throw new UnsupportedOperationException();
-    }
-
-    public String usernameAsString()
-    {
-        throw new UnsupportedOperationException();
-    }
-
-    public LogonEncoder username(final CharSequence value)
-    {
-        throw new UnsupportedOperationException();
-    }
-
-    public LogonEncoder username(final AsciiSequenceView value)
-    {
-        throw new UnsupportedOperationException();
-    }
-
-    public LogonEncoder username(final char[] value, final int offset, final int length)
-    {
-        throw new UnsupportedOperationException();
-    }
-
-    public LogonEncoder username(final char[] value, final int length)
-    {
-        throw new UnsupportedOperationException();
-    }
-
-    public LogonEncoder username(final char[] value)
-    {
-        throw new UnsupportedOperationException();
-    }
-
-    public MutableDirectBuffer username()
-    {
-        throw new UnsupportedOperationException();
-    }
-
-    public void resetUsername()
-    {
-        throw new UnsupportedOperationException();
-    }    public boolean supportsUsername()
-    {
-        return false;
+        return true;
     }
 
     public boolean supportsPassword()
@@ -515,12 +597,31 @@ public class LogonEncoder implements AbstractLogonEncoder
             position++;
         }
 
+        if (usernameLength > 0)
+        {
+            buffer.putBytes(position, usernameHeader, 0, usernameHeaderLength);
+            position += usernameHeaderLength;
+            buffer.putBytes(position, username, usernameOffset, usernameLength);
+            position += usernameLength;
+            buffer.putSeparator(position);
+            position++;
+        }
+
         if (passwordLength > 0)
         {
             buffer.putBytes(position, passwordHeader, 0, passwordHeaderLength);
             position += passwordHeaderLength;
             buffer.putBytes(position, password, passwordOffset, passwordLength);
             position += passwordLength;
+            buffer.putSeparator(position);
+            position++;
+        }
+
+        if (hasMessageHandling)
+        {
+            buffer.putBytes(position, messageHandlingHeader, 0, messageHandlingHeaderLength);
+            position += messageHandlingHeaderLength;
+            position += buffer.putIntAscii(position, messageHandling);
             buffer.putSeparator(position);
             position++;
         }
@@ -557,7 +658,9 @@ public class LogonEncoder implements AbstractLogonEncoder
         this.resetRawDataLength();
         this.resetRawData();
         this.resetResetSeqNumFlag();
+        this.resetUsername();
         this.resetPassword();
+        this.resetMessageHandling();
         this.resetCancelOrdersOnDisconnect();
     }
 
@@ -586,10 +689,21 @@ public class LogonEncoder implements AbstractLogonEncoder
         hasResetSeqNumFlag = false;
     }
 
+    public void resetUsername()
+    {
+        usernameLength = 0;
+        username.wrap(usernameInternalBuffer);
+    }
+
     public void resetPassword()
     {
         passwordLength = 0;
         password.wrap(passwordInternalBuffer);
+    }
+
+    public void resetMessageHandling()
+    {
+        hasMessageHandling = false;
     }
 
     public void resetCancelOrdersOnDisconnect()
@@ -654,11 +768,27 @@ public class LogonEncoder implements AbstractLogonEncoder
             builder.append("\",\n");
         }
 
+        if (hasUsername())
+        {
+            indent(builder, level);
+            builder.append("\"Username\": \"");
+            appendBuffer(builder, username, usernameOffset, usernameLength);
+            builder.append("\",\n");
+        }
+
         if (hasPassword())
         {
             indent(builder, level);
             builder.append("\"Password\": \"");
             appendBuffer(builder, password, passwordOffset, passwordLength);
+            builder.append("\",\n");
+        }
+
+        if (hasMessageHandling())
+        {
+            indent(builder, level);
+            builder.append("\"MessageHandling\": \"");
+            builder.append(messageHandling);
             builder.append("\",\n");
         }
 
@@ -708,9 +838,19 @@ public class LogonEncoder implements AbstractLogonEncoder
             encoder.resetSeqNumFlag(this.resetSeqNumFlag());
         }
 
+        if (hasUsername())
+        {
+            encoder.usernameAsCopy(username.byteArray(), 0, usernameLength);
+        }
+
         if (hasPassword())
         {
             encoder.passwordAsCopy(password.byteArray(), 0, passwordLength);
+        }
+
+        if (hasMessageHandling())
+        {
+            encoder.messageHandling(this.messageHandling());
         }
 
         if (hasCancelOrdersOnDisconnect())

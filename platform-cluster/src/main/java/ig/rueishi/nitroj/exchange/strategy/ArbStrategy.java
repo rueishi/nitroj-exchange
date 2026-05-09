@@ -272,7 +272,8 @@ public final class ArbStrategy implements Strategy {
             .legCount((byte) 2)
             .leg2Side(Side.SELL)
             .leg2LimitPriceScaled(sellPrice)
-            .parentTimeoutMicros(config.legTimeoutClusterMicros());
+            .parentTimeoutMicros(config.legTimeoutClusterMicros())
+            .venueSetId(0);
         parentIntentDecoder.wrapAndApplyHeader(egressBuffer, 0, headerDecoder);
         return executionEngine.submit(parentIntentDecoder);
     }

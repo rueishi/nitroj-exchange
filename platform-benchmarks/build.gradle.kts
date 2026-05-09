@@ -1,5 +1,5 @@
 /*
- * JMH benchmark module for V12 hot-path allocation and latency evidence.
+ * JMH benchmark module for V12, V13, and V14 hot-path allocation and latency evidence.
  *
  * The module is intentionally separate from production code. Benchmarks allocate
  * setup fixtures before measurement, then exercise gateway/cluster hot paths
@@ -15,6 +15,7 @@ val jmhVersion = "1.37"
 val jmhReportsDir = layout.buildDirectory.dir("reports/jmh")
 val jmhAllocationJson = jmhReportsDir.map { it.file("jmh-allocation-results.json") }
 val jmhLatencyJson = jmhReportsDir.map { it.file("jmh-latency-results.json") }
+val jmhInclude = providers.gradleProperty("jmhInclude")
 val jmhJvmArgs = listOf(
     "--enable-preview",
     "-XX:-RestrictContended",
@@ -49,7 +50,7 @@ dependencies {
 }
 
 tasks.register<JavaExec>("jmh") {
-    description = "Runs V12 hot-path JMH benchmarks with GC allocation profiling and JSON output."
+    description = "Runs V12/V13/V14 hot-path JMH benchmarks with GC allocation profiling and JSON output."
     group = "verification"
     dependsOn("jmhClasses")
     mainClass.set("org.openjdk.jmh.Main")
@@ -58,6 +59,7 @@ tasks.register<JavaExec>("jmh") {
     outputs.file(jmhAllocationJson)
     doFirst {
         jmhReportsDir.get().asFile.mkdirs()
+        jmhInclude.orNull?.let { args(it) }
     }
     args(
         "-prof", "gc",
@@ -68,7 +70,7 @@ tasks.register<JavaExec>("jmh") {
 }
 
 tasks.register<JavaExec>("jmhLatencyReport") {
-    description = "Runs V12 hot-path JMH sample-time benchmarks with latency percentile JSON output."
+    description = "Runs V12/V13/V14 hot-path JMH sample-time benchmarks with latency percentile JSON output."
     group = "verification"
     dependsOn("jmhClasses")
     mainClass.set("org.openjdk.jmh.Main")
@@ -77,6 +79,7 @@ tasks.register<JavaExec>("jmhLatencyReport") {
     outputs.file(jmhLatencyJson)
     doFirst {
         jmhReportsDir.get().asFile.mkdirs()
+        jmhInclude.orNull?.let { args(it) }
     }
     args(
         "-bm", "sample",

@@ -2,6 +2,7 @@ package ig.rueishi.nitroj.exchange.execution;
 
 import ig.rueishi.nitroj.exchange.messages.ParentIntentType;
 import ig.rueishi.nitroj.exchange.messages.ParentOrderIntentDecoder;
+import ig.rueishi.nitroj.exchange.messages.BooleanType;
 import ig.rueishi.nitroj.exchange.messages.PriceMode;
 import ig.rueishi.nitroj.exchange.messages.Side;
 import ig.rueishi.nitroj.exchange.messages.TimeInForce;
@@ -59,6 +60,10 @@ public final class ParentOrderIntentView {
         return decoder.secondaryVenueId();
     }
 
+    public int venueSetId() {
+        return decoder.venueSetId();
+    }
+
     public long quantityScaled() {
         return decoder.quantityScaled();
     }
@@ -83,12 +88,28 @@ public final class ParentOrderIntentView {
         return decoder.urgencyHint();
     }
 
+    public BooleanType postOnlyPreference() {
+        return decoder.postOnlyPreference();
+    }
+
+    public byte selfTradePolicy() {
+        return decoder.selfTradePolicy();
+    }
+
     public long correlationId() {
         return decoder.correlationId();
     }
 
     public byte legCount() {
         return decoder.legCount();
+    }
+
+    public Side leg2Side() {
+        return decoder.leg2Side();
+    }
+
+    public long leg2LimitPriceScaled() {
+        return decoder.leg2LimitPriceScaled();
     }
 
     public long parentTimeoutMicros() {

@@ -22,28 +22,32 @@ import java.util.Objects;
  * deliberately bounded to one attempt so replay produces the same terminal
  * state and command sequence under the same ordered events.</p>
  *
- * <p>The implementation stores only primitive active-parent fields and uses the
- * context's reusable command buffer/encoders. Timer callbacks are deterministic
- * no-ops except for the observable counter; market-data callbacks trigger a
- * cancel/replace when a child is working.</p>
+ * <p>The implementation is called only from the deterministic cluster thread;
+ * the bounded parent table below is for multiple open quote lifecycles, not for
+ * thread synchronization. A single market-making strategy can have bid and ask
+ * parents live at the same time, and V14 can run independent venue instances
+ * through this one registered execution plugin. Timer callbacks are
+ * deterministic no-ops except for the observable counter; market-data callbacks
+ * trigger cancel/replace for each matching active child.</p>
  */
 public final class PostOnlyQuoteExecution implements ExecutionStrategy {
+    public static final int DEFAULT_ACTIVE_PARENT_CAPACITY = 256;
     private static final byte[] EMPTY_BYTES = new byte[0];
     private static final long ONE_TICK_SCALED = 1L;
     private static final int MAX_POST_ONLY_RETRIES = 1;
 
     private ExecutionStrategyContext ctx;
-    private long activeParentOrderId;
-    private long activeChildClOrdId;
-    private int activeStrategyId;
-    private int activeVenueId;
-    private int activeInstrumentId;
-    private byte activeSide;
-    private long activePriceScaled;
-    private long activeQtyScaled;
-    private int retryCount;
-    private boolean refreshPending;
-    private boolean parentCancelPending;
+    private final long[] parentOrderIds;
+    private final long[] childClOrdIds;
+    private final int[] strategyIds;
+    private final int[] venueIds;
+    private final int[] instrumentIds;
+    private final byte[] sides;
+    private final long[] priceScaled;
+    private final long[] qtyScaled;
+    private final int[] retryCounts;
+    private final boolean[] refreshPending;
+    private final boolean[] parentCancelPending;
 
     private long parentIntents;
     private long refreshTriggers;
@@ -55,6 +59,28 @@ public final class PostOnlyQuoteExecution implements ExecutionStrategy {
     private long riskRejects;
     private long capacityRejects;
     private long timerCallbacks;
+    private long missingCallbackDrops;
+
+    public PostOnlyQuoteExecution() {
+        this(DEFAULT_ACTIVE_PARENT_CAPACITY);
+    }
+
+    PostOnlyQuoteExecution(final int activeParentCapacity) {
+        if (activeParentCapacity <= 0) {
+            throw new IllegalArgumentException("activeParentCapacity must be positive");
+        }
+        parentOrderIds = new long[activeParentCapacity];
+        childClOrdIds = new long[activeParentCapacity];
+        strategyIds = new int[activeParentCapacity];
+        venueIds = new int[activeParentCapacity];
+        instrumentIds = new int[activeParentCapacity];
+        sides = new byte[activeParentCapacity];
+        priceScaled = new long[activeParentCapacity];
+        qtyScaled = new long[activeParentCapacity];
+        retryCounts = new int[activeParentCapacity];
+        refreshPending = new boolean[activeParentCapacity];
+        parentCancelPending = new boolean[activeParentCapacity];
+    }
 
     @Override
     public int executionStrategyId() {
@@ -74,8 +100,9 @@ public final class PostOnlyQuoteExecution implements ExecutionStrategy {
             return;
         }
 
-        if (activeParentOrderId == intent.parentOrderId() && activeChildClOrdId != 0L) {
-            requestCancelReplace();
+        int slot = findByParent(intent.parentOrderId());
+        if (slot >= 0 && childClOrdIds[slot] != 0L) {
+            requestCancelReplace(slot);
             return;
         }
 
@@ -90,46 +117,59 @@ public final class PostOnlyQuoteExecution implements ExecutionStrategy {
             return;
         }
 
-        activeParentOrderId = intent.parentOrderId();
-        activeStrategyId = intent.strategyId();
-        activeVenueId = intent.primaryVenueId();
-        activeInstrumentId = intent.instrumentId();
-        activeSide = intent.side().value();
-        activePriceScaled = intent.limitPriceScaled();
-        activeQtyScaled = intent.quantityScaled();
-        retryCount = 0;
-        refreshPending = false;
-        parentCancelPending = false;
-        submitChild(childClOrdId(intent), activePriceScaled, ParentOrderState.REASON_NONE);
+        slot = allocateSlot(intent.parentOrderId());
+        if (slot < 0) {
+            capacityRejects++;
+            ctx.parentOrderRegistry().transition(intent.parentOrderId(), ParentOrderState.FAILED,
+                ParentOrderState.REASON_CAPACITY_REJECTED, ctx.clock().clusterTimeMicros());
+            return;
+        }
+
+        strategyIds[slot] = intent.strategyId();
+        venueIds[slot] = intent.primaryVenueId();
+        instrumentIds[slot] = intent.instrumentId();
+        sides[slot] = intent.side().value();
+        priceScaled[slot] = intent.limitPriceScaled();
+        qtyScaled[slot] = intent.quantityScaled();
+        retryCounts[slot] = 0;
+        refreshPending[slot] = false;
+        parentCancelPending[slot] = false;
+        submitChild(slot, childClOrdId(intent), priceScaled[slot], ParentOrderState.REASON_NONE);
     }
 
     @Override
     public void onMarketDataTick(final int venueId, final int instrumentId, final long clusterTimeMicros) {
         requireInitialized();
-        if (activeChildClOrdId == 0L || venueId != activeVenueId || instrumentId != activeInstrumentId) {
-            return;
+        for (int slot = 0; slot < parentOrderIds.length; slot++) {
+            if (parentOrderIds[slot] != 0L
+                && childClOrdIds[slot] != 0L
+                && venueId == venueIds[slot]
+                && instrumentId == instrumentIds[slot]) {
+                refreshTriggers++;
+                requestCancelReplace(slot);
+            }
         }
-        refreshTriggers++;
-        requestCancelReplace();
     }
 
     @Override
     public void onChildExecution(final ChildExecutionView execution) {
         requireInitialized();
-        if (execution.parentOrderId() != activeParentOrderId || activeParentOrderId == 0L) {
+        final int slot = findByParent(execution.parentOrderId());
+        if (slot < 0) {
+            missingCallbackDrops++;
             return;
         }
 
         switch (execution.execType()) {
-            case NEW -> ctx.parentOrderRegistry().transition(activeParentOrderId, ParentOrderState.WORKING,
+            case NEW -> ctx.parentOrderRegistry().transition(parentOrderIds[slot], ParentOrderState.WORKING,
                 ParentOrderState.REASON_NONE, ctx.clock().clusterTimeMicros());
-            case FILL, PARTIAL_FILL -> onFill(execution);
-            case REJECTED -> onPostOnlyReject(execution.childClOrdId());
-            case CANCELED -> onChildCanceled(execution.childClOrdId());
-            case EXPIRED -> terminal(ParentOrderState.EXPIRED, ParentOrderState.REASON_EXPIRED, execution.childClOrdId());
+            case FILL, PARTIAL_FILL -> onFill(slot, execution);
+            case REJECTED -> onPostOnlyReject(slot, execution.childClOrdId());
+            case CANCELED -> onChildCanceled(slot, execution.childClOrdId());
+            case EXPIRED -> terminal(slot, ParentOrderState.EXPIRED, ParentOrderState.REASON_EXPIRED, execution.childClOrdId());
             default -> {
                 if (execution.finalExecution()) {
-                    terminal(ParentOrderState.FAILED, ParentOrderState.REASON_EXECUTION_ABORTED, execution.childClOrdId());
+                    terminal(slot, ParentOrderState.FAILED, ParentOrderState.REASON_EXECUTION_ABORTED, execution.childClOrdId());
                 }
             }
         }
@@ -143,13 +183,15 @@ public final class PostOnlyQuoteExecution implements ExecutionStrategy {
     @Override
     public void onCancel(final long parentOrderId, final byte reasonCode) {
         requireInitialized();
-        if (parentOrderId != activeParentOrderId || activeChildClOrdId == 0L) {
+        final int slot = findByParent(parentOrderId);
+        if (slot < 0 || childClOrdIds[slot] == 0L) {
+            missingCallbackDrops++;
             return;
         }
         parentCancels++;
-        parentCancelPending = true;
-        encodeCancel(activeChildClOrdId);
-        ctx.orderManager().markCancelSent(activeChildClOrdId);
+        parentCancelPending[slot] = true;
+        encodeCancel(slot, childClOrdIds[slot]);
+        ctx.orderManager().markCancelSent(childClOrdIds[slot]);
         ctx.parentOrderRegistry().transition(parentOrderId, ParentOrderState.CANCEL_PENDING,
             reasonCode, ctx.clock().clusterTimeMicros());
     }
@@ -190,133 +232,173 @@ public final class PostOnlyQuoteExecution implements ExecutionStrategy {
         return timerCallbacks;
     }
 
-    private void requestCancelReplace() {
+    public long missingCallbackDrops() {
+        return missingCallbackDrops;
+    }
+
+    private void requestCancelReplace(final int slot) {
         cancelReplaceRequests++;
-        refreshPending = true;
-        encodeCancel(activeChildClOrdId);
-        ctx.orderManager().markCancelSent(activeChildClOrdId);
-        ctx.parentOrderRegistry().transition(activeParentOrderId, ParentOrderState.CANCEL_PENDING,
+        refreshPending[slot] = true;
+        encodeCancel(slot, childClOrdIds[slot]);
+        ctx.orderManager().markCancelSent(childClOrdIds[slot]);
+        ctx.parentOrderRegistry().transition(parentOrderIds[slot], ParentOrderState.CANCEL_PENDING,
             ParentOrderState.REASON_NONE, ctx.clock().clusterTimeMicros());
     }
 
-    private void onFill(final ChildExecutionView execution) {
+    private void onFill(final int slot, final ChildExecutionView execution) {
         fills++;
         ctx.parentOrderRegistry().updateFill(
-            activeParentOrderId,
+            parentOrderIds[slot],
             execution.cumQtyScaled(),
             execution.leavesQtyScaled(),
             execution.fillPriceScaled());
         if (execution.finalExecution() || execution.leavesQtyScaled() == 0L) {
-            terminal(ParentOrderState.DONE, ParentOrderState.REASON_COMPLETED, execution.childClOrdId());
+            terminal(slot, ParentOrderState.DONE, ParentOrderState.REASON_COMPLETED, execution.childClOrdId());
         } else {
-            ctx.parentOrderRegistry().transition(activeParentOrderId, ParentOrderState.PARTIALLY_FILLED,
+            ctx.parentOrderRegistry().transition(parentOrderIds[slot], ParentOrderState.PARTIALLY_FILLED,
                 ParentOrderState.REASON_NONE, ctx.clock().clusterTimeMicros());
         }
     }
 
-    private void onPostOnlyReject(final long rejectedChildClOrdId) {
+    private void onPostOnlyReject(final int slot, final long rejectedChildClOrdId) {
         ctx.parentOrderRegistry().unlinkChild(rejectedChildClOrdId);
-        if (retryCount >= MAX_POST_ONLY_RETRIES) {
+        if (retryCounts[slot] >= MAX_POST_ONLY_RETRIES) {
             retryExhaustions++;
-            terminalWithoutUnlink(ParentOrderState.FAILED, ParentOrderState.REASON_CHILD_REJECTED);
+            terminalWithoutUnlink(slot, ParentOrderState.FAILED, ParentOrderState.REASON_CHILD_REJECTED);
             return;
         }
-        retryCount++;
+        retryCounts[slot]++;
         retrySubmissions++;
-        activePriceScaled = activeSide == Side.BUY.value()
-            ? Math.max(0L, activePriceScaled - ONE_TICK_SCALED)
-            : activePriceScaled + ONE_TICK_SCALED;
-        submitChild(rejectedChildClOrdId + 1L, activePriceScaled, ParentOrderState.REASON_NONE);
+        priceScaled[slot] = sides[slot] == Side.BUY.value()
+            ? Math.max(0L, priceScaled[slot] - ONE_TICK_SCALED)
+            : priceScaled[slot] + ONE_TICK_SCALED;
+        submitChild(slot, rejectedChildClOrdId + 1L, priceScaled[slot], ParentOrderState.REASON_NONE);
     }
 
-    private void onChildCanceled(final long canceledChildClOrdId) {
+    private void onChildCanceled(final int slot, final long canceledChildClOrdId) {
         ctx.parentOrderRegistry().unlinkChild(canceledChildClOrdId);
-        if (parentCancelPending) {
-            terminalWithoutUnlink(ParentOrderState.CANCELED, ParentOrderState.REASON_CANCELED_BY_PARENT);
+        if (parentCancelPending[slot]) {
+            terminalWithoutUnlink(slot, ParentOrderState.CANCELED, ParentOrderState.REASON_CANCELED_BY_PARENT);
             return;
         }
-        if (refreshPending) {
-            refreshPending = false;
-            submitChild(canceledChildClOrdId + 1L, activePriceScaled, ParentOrderState.REASON_NONE);
+        if (refreshPending[slot]) {
+            refreshPending[slot] = false;
+            submitChild(slot, canceledChildClOrdId + 1L, priceScaled[slot], ParentOrderState.REASON_NONE);
         }
     }
 
-    private void submitChild(final long childClOrdId, final long priceScaled, final byte reasonCode) {
+    private void submitChild(final int slot, final long childClOrdId, final long childPriceScaled, final byte reasonCode) {
         final RiskDecision risk = ctx.riskEngine().preTradeCheck(
-            activeVenueId,
-            activeInstrumentId,
-            activeSide,
-            priceScaled,
-            activeQtyScaled,
-            activeStrategyId);
+            venueIds[slot],
+            instrumentIds[slot],
+            sides[slot],
+            childPriceScaled,
+            qtyScaled[slot],
+            strategyIds[slot]);
         if (!risk.approved()) {
             riskRejects++;
-            ctx.parentOrderRegistry().transition(activeParentOrderId, ParentOrderState.FAILED,
+            ctx.parentOrderRegistry().transition(parentOrderIds[slot], ParentOrderState.FAILED,
                 ParentOrderState.REASON_RISK_REJECTED, ctx.clock().clusterTimeMicros());
-            activeChildClOrdId = 0L;
+            childClOrdIds[slot] = 0L;
+            releaseSlot(slot);
             return;
         }
-        if (!ctx.parentOrderRegistry().linkChild(activeParentOrderId, childClOrdId)) {
+        if (!ctx.parentOrderRegistry().linkChild(parentOrderIds[slot], childClOrdId)) {
             capacityRejects++;
-            ctx.parentOrderRegistry().transition(activeParentOrderId, ParentOrderState.FAILED,
+            ctx.parentOrderRegistry().transition(parentOrderIds[slot], ParentOrderState.FAILED,
                 ParentOrderState.REASON_CAPACITY_REJECTED, ctx.clock().clusterTimeMicros());
-            activeChildClOrdId = 0L;
+            childClOrdIds[slot] = 0L;
+            releaseSlot(slot);
             return;
         }
-        activeChildClOrdId = childClOrdId;
+        childClOrdIds[slot] = childClOrdId;
         ctx.orderManager().createPendingOrder(
             childClOrdId,
-            activeVenueId,
-            activeInstrumentId,
-            activeSide,
+            venueIds[slot],
+            instrumentIds[slot],
+            sides[slot],
             OrdType.LIMIT.value(),
             TimeInForce.GTC.value(),
-            priceScaled,
-            activeQtyScaled,
-            activeStrategyId,
-            activeParentOrderId);
-        encodeNew(childClOrdId, priceScaled);
-        ctx.parentOrderRegistry().transition(activeParentOrderId, ParentOrderState.WORKING,
+            childPriceScaled,
+            qtyScaled[slot],
+            strategyIds[slot],
+            parentOrderIds[slot]);
+        encodeNew(slot, childClOrdId, childPriceScaled);
+        ctx.parentOrderRegistry().transition(parentOrderIds[slot], ParentOrderState.WORKING,
             reasonCode, ctx.clock().clusterTimeMicros());
     }
 
-    private void terminal(final byte status, final byte reasonCode, final long childClOrdId) {
+    private void terminal(final int slot, final byte status, final byte reasonCode, final long childClOrdId) {
         ctx.parentOrderRegistry().unlinkChild(childClOrdId);
-        terminalWithoutUnlink(status, reasonCode);
+        terminalWithoutUnlink(slot, status, reasonCode);
     }
 
-    private void terminalWithoutUnlink(final byte status, final byte reasonCode) {
-        ctx.parentOrderRegistry().transition(activeParentOrderId, status, reasonCode, ctx.clock().clusterTimeMicros());
-        activeChildClOrdId = 0L;
-        refreshPending = false;
-        parentCancelPending = false;
+    private void terminalWithoutUnlink(final int slot, final byte status, final byte reasonCode) {
+        ctx.parentOrderRegistry().transition(parentOrderIds[slot], status, reasonCode, ctx.clock().clusterTimeMicros());
+        releaseSlot(slot);
     }
 
-    private void encodeNew(final long childClOrdId, final long priceScaled) {
+    private void encodeNew(final int slot, final long childClOrdId, final long childPriceScaled) {
         final NewOrderCommandEncoder encoder = ctx.newOrderEncoder();
         encoder.wrapAndApplyHeader(ctx.commandBuffer(), 0, ctx.headerEncoder())
             .clOrdId(childClOrdId)
-            .venueId(activeVenueId)
-            .instrumentId(activeInstrumentId)
-            .side(Side.get(activeSide))
+            .venueId(venueIds[slot])
+            .instrumentId(instrumentIds[slot])
+            .side(Side.get(sides[slot]))
             .ordType(OrdType.LIMIT)
             .timeInForce(TimeInForce.GTC)
-            .priceScaled(priceScaled)
-            .qtyScaled(activeQtyScaled)
-            .strategyId((short) activeStrategyId)
-            .parentOrderId(activeParentOrderId);
+            .priceScaled(childPriceScaled)
+            .qtyScaled(qtyScaled[slot])
+            .strategyId((short) strategyIds[slot])
+            .parentOrderId(parentOrderIds[slot]);
     }
 
-    private void encodeCancel(final long childClOrdId) {
+    private void encodeCancel(final int slot, final long childClOrdId) {
         final CancelOrderCommandEncoder encoder = ctx.cancelOrderEncoder();
         encoder.wrapAndApplyHeader(ctx.commandBuffer(), 0, ctx.headerEncoder())
             .cancelClOrdId(childClOrdId + 1L)
             .origClOrdId(childClOrdId)
-            .venueId(activeVenueId)
-            .instrumentId(activeInstrumentId)
-            .side(Side.get(activeSide))
-            .originalQtyScaled(activeQtyScaled)
+            .venueId(venueIds[slot])
+            .instrumentId(instrumentIds[slot])
+            .side(Side.get(sides[slot]))
+            .originalQtyScaled(qtyScaled[slot])
             .putVenueOrderId(EMPTY_BYTES, 0, 0);
+    }
+
+    private int allocateSlot(final long parentOrderId) {
+        for (int i = 0; i < parentOrderIds.length; i++) {
+            if (parentOrderIds[i] == 0L) {
+                parentOrderIds[i] = parentOrderId;
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private int findByParent(final long parentOrderId) {
+        if (parentOrderId <= 0L) {
+            return -1;
+        }
+        for (int i = 0; i < parentOrderIds.length; i++) {
+            if (parentOrderIds[i] == parentOrderId) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private void releaseSlot(final int slot) {
+        parentOrderIds[slot] = 0L;
+        childClOrdIds[slot] = 0L;
+        strategyIds[slot] = 0;
+        venueIds[slot] = 0;
+        instrumentIds[slot] = 0;
+        sides[slot] = 0;
+        priceScaled[slot] = 0L;
+        qtyScaled[slot] = 0L;
+        retryCounts[slot] = 0;
+        refreshPending[slot] = false;
+        parentCancelPending[slot] = false;
     }
 
     private static long childClOrdId(final ParentOrderIntentView intent) {

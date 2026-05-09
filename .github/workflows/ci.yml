@@ -1,0 +1,45 @@
+# Baseline CI workflow for the NitroJEx scaffold.
+#
+# TASK-001 wires the default verification path (`check`) and keeps E2E execution
+# isolated in a separate optional job because the simulator/test harness are not
+# implemented yet. The e2e job is allowed to fail at scaffold time because the
+# task only requires the task registration and pipeline shape.
+
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Validate build
+        run: ./gradlew check
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: check
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Run e2e test task
+        run: ./gradlew e2eTest

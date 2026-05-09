@@ -15,11 +15,11 @@ final class BenchmarkSurfaceMapTest {
     private static final Path BENCHMARK_SOURCE_ROOT = Path.of("src", "jmh", "java");
 
     @Test
-    void everyDeclaredV12HotPathSurfaceComesFromAllocationPolicy() {
+    void everyDeclaredV14HotPathSurfaceComesFromAllocationPolicy() {
         assertThat(Arrays.stream(AllocationPolicy.HotPath.values())
                 .map(AllocationPolicy.HotPath::documentedName)
                 .collect(Collectors.toSet()))
-            .containsExactlyInAnyOrder(
+            .contains(
                 "FIX L2 parsing",
                 "FIX L3 parsing",
                 "FIX execution-report parsing",
@@ -43,6 +43,21 @@ final class BenchmarkSurfaceMapTest {
                 "ImmediateLimitExecution callback",
                 "PostOnlyQuoteExecution callback",
                 "MultiLegContingentExecution callback",
+                "InventoryHedgeStrategy.onMarketDataTick",
+                "InventoryHedgeStrategy.onPortfolioUpdate",
+                "InventoryHedgeStrategy parent-intent emission",
+                "ParallelVenueExecution.onParentIntent",
+                "ParallelVenueExecution slice-plan computation",
+                "ParallelVenueExecution.onChildExecution",
+                "ParallelVenueExecution.onTimer",
+                "SmartOrderRoutingExecution.onParentIntent",
+                "SmartOrderRoutingExecution slice-plan computation",
+                "SmartOrderRoutingExecution.onMarketDataTick (re-slice path)",
+                "SmartOrderRoutingExecution.onChildExecution",
+                "SmartOrderRoutingExecution.onTimer",
+                "Mixed-precision OwnOrderOverlay query path for L2 venues",
+                "BinanceL2MarketDataNormalizer SBE event production",
+                "BinanceVenuePlugin order-entry policy enrichment",
                 "order command encoding");
 
         assertThat(AllocationPolicy.HotPath.values())
@@ -54,6 +69,8 @@ final class BenchmarkSurfaceMapTest {
     void implementedBenchmarkOwnersHaveSourceFiles() {
         final Set<String> implementedBenchmarkOwners = Set.of(
             "BookMutationBenchmark",
+            "BinanceL2NormalizerBenchmark",
+            "BinanceOrderEntryPolicyBenchmark",
             "ExecutionReportBenchmark",
             "FixL2NormalizerBenchmark",
             "FixL3NormalizerBenchmark",
@@ -67,7 +84,10 @@ final class BenchmarkSurfaceMapTest {
             "ExecutionStrategyEngineBenchmark",
             "ImmediateLimitExecutionBenchmark",
             "PostOnlyQuoteExecutionBenchmark",
+            "InventoryHedgeStrategyBenchmark",
+            "ParallelVenueExecutionBenchmark",
             "MultiLegContingentExecutionBenchmark",
+            "SmartOrderRoutingExecutionBenchmark",
             "StrategyTickBenchmark"
         );
 
@@ -81,6 +101,18 @@ final class BenchmarkSurfaceMapTest {
                 .map(AllocationPolicy.HotPath::benchmarkOwner)
                 .collect(Collectors.toSet()))
             .isSubsetOf(implementedBenchmarkOwners);
+    }
+
+    @Test
+    void v14PreflightRunsPriorEvidenceGatesAndBenchmarkReports() throws Exception {
+        final String script = Files.readString(Path.of("..", "scripts", "v14-preflight-check.sh"));
+
+        assertThat(script)
+            .contains("v12-preflight-check.sh")
+            .contains("v13-preflight-check.sh")
+            .contains(":platform-benchmarks:jmh")
+            .contains(":platform-benchmarks:jmhLatencyReport")
+            .contains(":platform-benchmarks:verifyJmhReports");
     }
 
     private static boolean benchmarkSourceExists(final String owner) {

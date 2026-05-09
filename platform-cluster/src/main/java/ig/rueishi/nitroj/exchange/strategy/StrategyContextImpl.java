@@ -31,8 +31,10 @@ import org.agrona.concurrent.status.CountersManager;
  * @param orderManager live order lifecycle owner
  * @param portfolioEngine position and PnL owner
  * @param recoveryCoordinator venue recovery state owner
- * @param executionEngine optional V13 execution-strategy engine; may be null
- * during staged migration before TASK-305 wiring is installed
+ * @param executionEngine optional execution-strategy engine; V14 startup must
+ * validate strategy/execution compatibility before this context is handed to
+ * strategies, while tests may still pass {@code null} for isolated strategy
+ * construction
  * @param cluster Aeron Cluster facade, initially {@code null} before service
  * start
  * @param egressBuffer reusable strategy command buffer

@@ -93,6 +93,9 @@ public class NewOrderSingleEncoder implements Encoder
     private static final int selfTradeTypeHeaderLength = 5;
     private static final byte[] selfTradeTypeHeader = new byte[] {55, 57, 50, 56, (byte) '='};
 
+    private static final int selfTradePreventionModeHeaderLength = 6;
+    private static final byte[] selfTradePreventionModeHeader = new byte[] {50, 53, 48, 48, 49, (byte) '='};
+
     private final MutableDirectBuffer account = new UnsafeBuffer();
     private byte[] accountInternalBuffer = account.byteArray();
     private int accountOffset = 0;
@@ -725,6 +728,29 @@ public class NewOrderSingleEncoder implements Encoder
         return selfTradeType;
     }
 
+    private char selfTradePreventionMode;
+
+    private boolean hasSelfTradePreventionMode;
+
+    public boolean hasSelfTradePreventionMode()
+    {
+        return hasSelfTradePreventionMode;
+    }
+
+    /* SelfTradePreventionMode = 25001 */
+    public NewOrderSingleEncoder selfTradePreventionMode(char value)
+    {
+        selfTradePreventionMode = value;
+        hasSelfTradePreventionMode = true;
+        return this;
+    }
+
+    /* SelfTradePreventionMode = 25001 */
+    public char selfTradePreventionMode()
+    {
+        return selfTradePreventionMode;
+    }
+
     public long encode(final MutableAsciiBuffer buffer, final int offset)
     {
         final long startMessageResult = header.startMessage(buffer, offset);
@@ -861,6 +887,15 @@ public class NewOrderSingleEncoder implements Encoder
             buffer.putSeparator(position);
             position++;
         }
+
+        if (hasSelfTradePreventionMode)
+        {
+            buffer.putBytes(position, selfTradePreventionModeHeader, 0, selfTradePreventionModeHeaderLength);
+            position += selfTradePreventionModeHeaderLength;
+            position += buffer.putCharAscii(position, selfTradePreventionMode);
+            buffer.putSeparator(position);
+            position++;
+        }
         position += trailer.startTrailer(buffer, position);
 
         final int messageStart = header.finishHeader(buffer, bodyStart, position - bodyStart);
@@ -887,6 +922,7 @@ public class NewOrderSingleEncoder implements Encoder
         this.resetPrice();
         this.resetTimeInForce();
         this.resetSelfTradeType();
+        this.resetSelfTradePreventionMode();
     }
 
     public void resetAccount()
@@ -946,6 +982,11 @@ public class NewOrderSingleEncoder implements Encoder
     public void resetSelfTradeType()
     {
         hasSelfTradeType = false;
+    }
+
+    public void resetSelfTradePreventionMode()
+    {
+        hasSelfTradePreventionMode = false;
     }
 
     public String toString()
@@ -1052,6 +1093,14 @@ public class NewOrderSingleEncoder implements Encoder
             builder.append(selfTradeType);
             builder.append("\",\n");
         }
+
+        if (hasSelfTradePreventionMode())
+        {
+            indent(builder, level);
+            builder.append("\"SelfTradePreventionMode\": \"");
+            builder.append(selfTradePreventionMode);
+            builder.append("\",\n");
+        }
         indent(builder, level - 1);
         builder.append("}");
         return builder;
@@ -1118,6 +1167,11 @@ public class NewOrderSingleEncoder implements Encoder
         if (hasSelfTradeType())
         {
             encoder.selfTradeType(this.selfTradeType());
+        }
+
+        if (hasSelfTradePreventionMode())
+        {
+            encoder.selfTradePreventionMode(this.selfTradePreventionMode());
         }
         return encoder;
     }

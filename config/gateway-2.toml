@@ -1,0 +1,50 @@
+# NitroJEx gateway process configuration for Binance venue ID 2.
+#
+# Runtime use: ConfigManager.loadGateway() parses this file before GatewayMain
+# creates the Binance gateway runtime. Production secrets stay outside this
+# file; [credentials] stores only the approved secret-source path.
+
+[process]
+venueId     = 2
+nodeRole    = "gateway"
+aeronDir    = "/dev/shm/aeron"
+logDir      = "./log/gateway-2"
+
+[cluster]
+ingressChannel  = "aeron:udp?endpoint=localhost:9010"
+egressChannel   = "aeron:udp?endpoint=localhost:20001"
+members = [
+    "aeron:udp?endpoint=localhost:9010",
+    "aeron:udp?endpoint=localhost:9020",
+    "aeron:udp?endpoint=localhost:9030",
+]
+
+[fix]
+senderCompId        = "YOUR_BINANCE_SENDER_COMP_ID"
+targetCompId        = "SPOT"
+heartbeatIntervalS  = 30
+reconnectIntervalMs = 5000
+resetSeqNumOnLogon  = true
+artioLogDir         = "./artio-store/venue-2"
+artioReplayCapacity = 4096
+
+[credentials]
+vaultPath = "secret/trading/binance/venue-2"
+
+[rest]
+baseUrl        = "https://api.binance.com"
+pollIntervalMs = 0
+timeoutMs      = 5000
+
+[cpu]
+artioLibraryThread     = 5
+gatewayDisruptorThread = 6
+gatewayEgressThread    = 7
+
+[disruptor]
+ringBufferSize = 4096
+slotSizeBytes  = 512
+
+[metrics]
+counterFileDir    = "/dev/shm/metrics/gateway-2"
+histogramOutputMs = 5000

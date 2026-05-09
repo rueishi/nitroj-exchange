@@ -27,6 +27,7 @@ import org.agrona.concurrent.UnsafeBuffer;
 import org.agrona.concurrent.status.CountersManager;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
+import org.openjdk.jmh.annotations.AuxCounters;
 import org.openjdk.jmh.annotations.Fork;
 import org.openjdk.jmh.annotations.Level;
 import org.openjdk.jmh.annotations.Measurement;
@@ -38,6 +39,8 @@ import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Warmup;
 
+import java.lang.management.ManagementFactory;
+import java.nio.ByteBuffer;
 import java.util.concurrent.TimeUnit;
 
 @BenchmarkMode(Mode.SampleTime)
@@ -48,6 +51,7 @@ import java.util.concurrent.TimeUnit;
 @State(Scope.Thread)
 public class PostOnlyQuoteExecutionBenchmark {
     private static final int OPS = 128;
+    private static final int ALLOCATION_CHECK_WARMUP_INVOCATIONS = 10_000;
     private static final long PRICE = 65_000L * Ids.SCALE;
     private static final long QTY = Ids.SCALE;
 
@@ -55,62 +59,112 @@ public class PostOnlyQuoteExecutionBenchmark {
     private ParentOrderRegistry registry;
     private BenchmarkOrderManager orderManager;
     private ParentOrderIntentView[] intents;
-    private ChildExecutionView[] partialFills;
+    private ChildExecutionView[] finalFills;
+    private ExecutionStrategyContext context;
+    private com.sun.management.ThreadMXBean threadBean;
+    private long threadId;
+    private long allocationProbeOverheadBytes;
+    private int allocationCheckWarmupInvocations;
 
     @Setup(Level.Trial)
     public void setupTrial() {
         registry = new ParentOrderRegistry(OPS + 8, OPS + 8);
         orderManager = new BenchmarkOrderManager();
-        strategy = new PostOnlyQuoteExecution();
-        strategy.init(new ExecutionStrategyContext(
+        context = new ExecutionStrategyContext(
             new InternalMarketView(),
             new RiskStub(),
             orderManager,
             registry,
-            new UnsafeBuffer(new byte[1024]),
+            new UnsafeBuffer(ByteBuffer.allocateDirect(1024)),
             new MessageHeaderEncoder(),
             new NewOrderCommandEncoder(),
             new CancelOrderCommandEncoder(),
             () -> 1L,
             (correlationId, deadlineClusterMicros) -> true,
             new IdRegistryStub(),
-            counters()));
+            counters());
         intents = new ParentOrderIntentView[OPS];
-        partialFills = new ChildExecutionView[OPS];
+        finalFills = new ChildExecutionView[OPS];
         for (int i = 0; i < OPS; i++) {
             final long parentOrderId = 19_000L + i;
             final long childOrderId = 20_000L + i;
             intents[i] = new ParentOrderIntentView().wrap(intent(parentOrderId, childOrderId));
-            partialFills[i] = new ChildExecutionView().wrap(fill(childOrderId), parentOrderId);
+            finalFills[i] = new ChildExecutionView().wrap(fill(childOrderId), parentOrderId);
         }
+        threadBean = (com.sun.management.ThreadMXBean)ManagementFactory.getThreadMXBean();
+        if (!threadBean.isThreadAllocatedMemorySupported()) {
+            throw new IllegalStateException("Thread allocation measurement is not supported by this JVM");
+        }
+        threadBean.setThreadAllocatedMemoryEnabled(true);
+        threadId = Thread.currentThread().threadId();
+        allocationProbeOverheadBytes = allocationProbeOverheadBytes();
+        allocationCheckWarmupInvocations = ALLOCATION_CHECK_WARMUP_INVOCATIONS;
+    }
+
+    @Setup(Level.Invocation)
+    public void setupInvocation() {
+        registry.reset();
+        orderManager.resetAll();
+        strategy = new PostOnlyQuoteExecution();
+        strategy.init(context);
     }
 
     @Benchmark
     @OperationsPerInvocation(OPS)
-    public long marketDataRefreshCallbacks() {
-        registry.reset();
-        orderManager.resetAll();
+    public long marketDataRefreshCallbacks(final AllocationCounters counters) {
+        final long before = threadBean.getThreadAllocatedBytes(threadId);
         for (int i = 0; i < OPS; i++) {
             strategy.onParentIntent(intents[i]);
-            strategy.onMarketDataTick(Ids.VENUE_COINBASE, Ids.INSTRUMENT_BTC_USD, 1L);
         }
+        strategy.onMarketDataTick(Ids.VENUE_COINBASE, Ids.INSTRUMENT_BTC_USD, 1L);
+        final long allocatedBytes = Math.max(0L, threadBean.getThreadAllocatedBytes(threadId) - before - allocationProbeOverheadBytes);
+        assertNoAllocation(counters, allocatedBytes);
         return strategy.refreshTriggers();
     }
 
     @Benchmark
     @OperationsPerInvocation(OPS)
-    public long childFillCallbacks() {
-        registry.reset();
-        orderManager.resetAll();
+    public long childFillCallbacks(final AllocationCounters counters) {
+        final long before = threadBean.getThreadAllocatedBytes(threadId);
         for (int i = 0; i < OPS; i++) {
             strategy.onParentIntent(intents[i]);
-            strategy.onChildExecution(partialFills[i]);
+            strategy.onChildExecution(finalFills[i]);
         }
+        final long allocatedBytes = Math.max(0L, threadBean.getThreadAllocatedBytes(threadId) - before - allocationProbeOverheadBytes);
+        assertNoAllocation(counters, allocatedBytes);
         return strategy.fills();
     }
 
+    @AuxCounters(AuxCounters.Type.EVENTS)
+    @State(Scope.Thread)
+    public static class AllocationCounters {
+        public long measuredThreadAllocatedBytes;
+    }
+
+    private long assertNoAllocation(final AllocationCounters counters, final long allocatedBytes) {
+        if (allocationCheckWarmupInvocations > 0) {
+            allocationCheckWarmupInvocations--;
+            return allocatedBytes;
+        }
+        if (allocatedBytes != 0L) {
+            throw new AssertionError("PostOnlyQuoteExecution benchmark allocated " + allocatedBytes + " bytes");
+        }
+        counters.measuredThreadAllocatedBytes += allocatedBytes;
+        return allocatedBytes;
+    }
+
+    private long allocationProbeOverheadBytes() {
+        long overheadBytes = 0L;
+        for (int i = 0; i < 16; i++) {
+            final long before = threadBean.getThreadAllocatedBytes(threadId);
+            final long allocatedBytes = threadBean.getThreadAllocatedBytes(threadId) - before;
+            overheadBytes = Math.max(overheadBytes, allocatedBytes);
+        }
+        return overheadBytes;
+    }
+
     private static ParentOrderIntentDecoder intent(final long parentOrderId, final long childClOrdId) {
-        final UnsafeBuffer buffer = new UnsafeBuffer(new byte[256]);
+        final UnsafeBuffer buffer = new UnsafeBuffer(ByteBuffer.allocateDirect(256));
         new ParentOrderIntentEncoder()
             .wrapAndApplyHeader(buffer, 0, new MessageHeaderEncoder())
             .parentOrderId(parentOrderId)
@@ -140,7 +194,7 @@ public class PostOnlyQuoteExecutionBenchmark {
     }
 
     private static ExecutionEventDecoder fill(final long childClOrdId) {
-        final UnsafeBuffer buffer = new UnsafeBuffer(new byte[256]);
+        final UnsafeBuffer buffer = new UnsafeBuffer(ByteBuffer.allocateDirect(256));
         new ExecutionEventEncoder()
             .wrapAndApplyHeader(buffer, 0, new MessageHeaderEncoder())
             .clOrdId(childClOrdId)
@@ -165,7 +219,9 @@ public class PostOnlyQuoteExecutionBenchmark {
     }
 
     private static CountersManager counters() {
-        return new CountersManager(new UnsafeBuffer(new byte[1024 * 1024]), new UnsafeBuffer(new byte[64 * 1024]));
+        return new CountersManager(
+            new UnsafeBuffer(ByteBuffer.allocateDirect(1024 * 1024)),
+            new UnsafeBuffer(ByteBuffer.allocateDirect(64 * 1024)));
     }
 
     private static final class RiskStub implements RiskEngine {

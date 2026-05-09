@@ -10,11 +10,11 @@ import org.agrona.DirectBuffer;
 @SuppressWarnings("all")
 public final class ParentOrderIntentDecoder
 {
-    public static final int BLOCK_LENGTH = 83;
+    public static final int BLOCK_LENGTH = 87;
     public static final int TEMPLATE_ID = 40;
     public static final int SCHEMA_ID = 1;
-    public static final int SCHEMA_VERSION = 2;
-    public static final String SEMANTIC_VERSION = "5.2";
+    public static final int SCHEMA_VERSION = 3;
+    public static final String SEMANTIC_VERSION = "5.3";
     public static final java.nio.ByteOrder BYTE_ORDER = java.nio.ByteOrder.LITTLE_ENDIAN;
 
     private final ParentOrderIntentDecoder parentMessage = this;
@@ -1143,6 +1143,62 @@ public final class ParentOrderIntentDecoder
     }
 
 
+    public static int venueSetIdId()
+    {
+        return 22;
+    }
+
+    public static int venueSetIdSinceVersion()
+    {
+        return 3;
+    }
+
+    public static int venueSetIdEncodingOffset()
+    {
+        return 83;
+    }
+
+    public static int venueSetIdEncodingLength()
+    {
+        return 4;
+    }
+
+    public static String venueSetIdMetaAttribute(final MetaAttribute metaAttribute)
+    {
+        if (MetaAttribute.PRESENCE == metaAttribute)
+        {
+            return "optional";
+        }
+
+        return "";
+    }
+
+    public static int venueSetIdNullValue()
+    {
+        return 0;
+    }
+
+    public static int venueSetIdMinValue()
+    {
+        return -2147483647;
+    }
+
+    public static int venueSetIdMaxValue()
+    {
+        return 2147483647;
+    }
+
+    public int venueSetId()
+    {
+        if (parentMessage.actingVersion < 3)
+        {
+            return 0;
+        }
+
+        return buffer.getInt(offset + 83, BYTE_ORDER);
+    }
+
+
     public String toString()
     {
         if (null == buffer)
@@ -1246,6 +1302,9 @@ public final class ParentOrderIntentDecoder
         builder.append('|');
         builder.append("parentTimeoutMicros=");
         builder.append(this.parentTimeoutMicros());
+        builder.append('|');
+        builder.append("venueSetId=");
+        builder.append(this.venueSetId());
 
         limit(originalLimit);
 

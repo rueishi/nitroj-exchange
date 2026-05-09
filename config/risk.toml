@@ -1,0 +1,26 @@
+# NitroJEx V14 risk-limit configuration examples.
+#
+# This file is documentation/configuration only for TASK-412. The existing
+# RiskEngine semantics remain V13-compatible; V14 execution code can consume
+# these explicit per-venue and aggregate limits before child submission.
+#
+# Non-goal: do not infer aggregate exposure from USD/USDT symbol similarity.
+# Aggregate membership is explicit and operationally reviewable.
+
+[[risk.limit]]
+instrument = "BTC-USD-COINBASE"
+venue = "COINBASE"
+maxPosition = 5.0
+maxNotional = 250000.0
+
+[[risk.limit]]
+instrument = "BTC-USDT-BINANCE"
+venue = "BINANCE"
+maxPosition = 5.0
+maxNotional = 250000.0
+
+[[risk.limit.aggregate]]
+asset = "BTC"
+instruments = ["BTC-USD-COINBASE", "BTC-USDT-BINANCE"]
+maxPosition = 8.0
+maxNotional = 400000.0

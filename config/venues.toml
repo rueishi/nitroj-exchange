@@ -20,6 +20,19 @@ nativeReplaceSupported = false
 
 [[venue]]
 id        = 2
+name      = "BINANCE"
+fixHost   = "fix-oe.binance.com"
+fixPort   = 9000
+sandbox   = false
+fixPlugin = "FIX_44"
+venuePlugin = "BINANCE"
+marketDataModel = "L2"
+orderEntryEnabled = true
+marketDataEnabled = true
+nativeReplaceSupported = false
+
+[[venue]]
+id        = 3
 name      = "COINBASE_SANDBOX"
 fixHost   = "fix.sandbox.exchange.coinbase.com"
 fixPort   = 4198
@@ -31,4 +44,4 @@ orderEntryEnabled = true
 marketDataEnabled = true
 nativeReplaceSupported = false
 
-# Future venues continue from id=3.
+# Future venues continue from id=4.

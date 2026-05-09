@@ -41,7 +41,9 @@
             <field name="RawDataLength" required="N"/>
             <field name="RawData" required="N"/>
             <field name="ResetSeqNumFlag" required="N"/>
+            <field name="Username" required="N"/>
             <field name="Password" required="N"/>
+            <field name="MessageHandling" required="N"/>
             <field name="CancelOrdersOnDisconnect" required="Y"/>
         </message>
         <message name="NewOrderSingle" msgtype="D" msgcat="app">
@@ -56,6 +58,7 @@
 	            <field name="Price" required="N"/>
 	            <field name="TimeInForce" required="N"/>
 	            <field name="SelfTradeType" required="N"/>
+	            <field name="SelfTradePreventionMode" required="N"/>
 	        </message>
         <message name="OrderCancelRequest" msgtype="F" msgcat="app">
             <field name="OrigClOrdID" required="Y"/>
@@ -130,8 +133,11 @@
         <field number="50" name="SenderSubID" type="STRING"/>
         <field number="97" name="PossResend" type="BOOLEAN"/>
 	        <field number="141" name="ResetSeqNumFlag" type="BOOLEAN"/>
+	        <field number="553" name="Username" type="STRING"/>
 	        <field number="554" name="Password" type="STRING"/>
 	        <field number="7928" name="SelfTradeType" type="CHAR"/>
+	        <field number="25001" name="SelfTradePreventionMode" type="CHAR"/>
 	        <field number="8013" name="CancelOrdersOnDisconnect" type="CHAR"/>
+	        <field number="25035" name="MessageHandling" type="INT"/>
 	    </fields>
 	</fix>

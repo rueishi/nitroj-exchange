@@ -50,6 +50,16 @@ public interface OrderManager {
 
     long[] getLiveOrderIds(int venueId);
 
+    default void forEachLiveOrder(final int venueId, final LiveOrderConsumer consumer) {
+        final long[] ids = getLiveOrderIds(venueId);
+        for (int i = 0; i < ids.length; i++) {
+            final OrderState order = getOrder(ids[i]);
+            if (order != null) {
+                consumer.onLiveOrder(order);
+            }
+        }
+    }
+
     OrderState getOrder(long clOrdId);
 
     void forceTransitionToCanceled(long clOrdId);
@@ -64,4 +74,8 @@ public interface OrderManager {
     void setCluster(Cluster cluster);
 
     void resetAll();
+
+    interface LiveOrderConsumer {
+        void onLiveOrder(OrderState order);
+    }
 }

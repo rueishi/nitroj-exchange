@@ -315,6 +315,19 @@ final class ConfigManagerTest {
         assertThat(config.warmup().requireC2Verified()).isTrue();
     }
 
+    @Test
+    void loadGateway_binanceConfig_usesVenueTwoAndBinanceVaultPath() {
+        final GatewayConfig config = ConfigManager.loadGateway(configPath("gateway-2.toml"));
+
+        assertThat(config.venueId()).isEqualTo(Ids.VENUE_BINANCE);
+        assertThat(config.fix().senderCompId()).isEqualTo("YOUR_BINANCE_SENDER_COMP_ID");
+        assertThat(config.fix().targetCompId()).isEqualTo("SPOT");
+        assertThat(config.fix().resetSeqNumOnLogon()).isTrue();
+        assertThat(config.credentials().vaultPath()).isEqualTo("secret/trading/binance/venue-2");
+        assertThat(config.rest().baseUrl()).isEqualTo("https://api.binance.com");
+        assertThat(config.counterFileDir()).isEqualTo("/dev/shm/metrics/gateway-2");
+    }
+
     /**
      * Loads the repository venue registry and verifies the V11 plugin and
      * market-data capability fields are parsed for Coinbase's configured L3
@@ -331,6 +344,25 @@ final class ConfigManagerTest {
         assertThat(coinbase.capabilities().orderEntryEnabled()).isTrue();
         assertThat(coinbase.capabilities().marketDataEnabled()).isTrue();
         assertThat(coinbase.capabilities().nativeReplaceSupported()).isFalse();
+    }
+
+    @Test
+    void loadVenues_binanceV14VenueIdTwo_fix44L2ConfigLoaded() {
+        final List<VenueConfig> venues = ConfigManager.loadVenues(configPath("venues.toml"));
+        final VenueConfig binance = venues.stream()
+            .filter(venue -> venue.id() == Ids.VENUE_BINANCE)
+            .findFirst()
+            .orElseThrow();
+
+        assertThat(binance.name()).isEqualTo("BINANCE");
+        assertThat(binance.fixHost()).isEqualTo("fix-oe.binance.com");
+        assertThat(binance.fixPort()).isEqualTo(9000);
+        assertThat(binance.fixPlugin()).isEqualTo(FixPluginId.FIX_44);
+        assertThat(binance.venuePlugin()).isEqualTo("BINANCE");
+        assertThat(binance.marketDataModel()).isEqualTo(MarketDataModel.L2);
+        assertThat(binance.capabilities().orderEntryEnabled()).isTrue();
+        assertThat(binance.capabilities().marketDataEnabled()).isTrue();
+        assertThat(binance.capabilities().nativeReplaceSupported()).isFalse();
     }
 
     /**

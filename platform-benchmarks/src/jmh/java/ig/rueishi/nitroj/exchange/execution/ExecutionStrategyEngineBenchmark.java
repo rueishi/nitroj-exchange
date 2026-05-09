@@ -24,6 +24,7 @@ import org.agrona.concurrent.UnsafeBuffer;
 import org.agrona.concurrent.status.CountersManager;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
+import org.openjdk.jmh.annotations.AuxCounters;
 import org.openjdk.jmh.annotations.Fork;
 import org.openjdk.jmh.annotations.Level;
 import org.openjdk.jmh.annotations.Measurement;
@@ -34,6 +35,7 @@ import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Warmup;
 
+import java.lang.management.ManagementFactory;
 import java.util.concurrent.TimeUnit;
 
 @BenchmarkMode(Mode.AverageTime)
@@ -42,15 +44,27 @@ import java.util.concurrent.TimeUnit;
 @Measurement(iterations = 3, time = 100, timeUnit = TimeUnit.MILLISECONDS)
 @Fork(value = 1, jvmArgsAppend = {"--enable-preview"})
 public class ExecutionStrategyEngineBenchmark {
+    private static final int ALLOCATION_CHECK_WARMUP_INVOCATIONS = 10_000;
+
     @Benchmark
-    public boolean parentIntentDispatch(final EngineState state) {
-        return state.engine.submit(state.intentDecoder);
+    public boolean parentIntentDispatch(final EngineState state, final AllocationCounters counters) {
+        final long before = state.threadBean.getThreadAllocatedBytes(state.threadId);
+        final boolean result = state.engine.submit(state.intentDecoder);
+        final long allocatedBytes = Math.max(
+            0L,
+            state.threadBean.getThreadAllocatedBytes(state.threadId) - before - state.allocationProbeOverheadBytes);
+        state.assertNoAllocation(counters, allocatedBytes);
+        return result;
     }
 
     @State(Scope.Thread)
     public static class EngineState {
         ExecutionStrategyEngine engine;
         ParentOrderIntentDecoder intentDecoder;
+        com.sun.management.ThreadMXBean threadBean;
+        long threadId;
+        long allocationProbeOverheadBytes;
+        int allocationCheckWarmupInvocations;
 
         @Setup(Level.Trial)
         public void setup() {
@@ -73,7 +87,43 @@ public class ExecutionStrategyEngineBenchmark {
             registry.allowCompatibility(7, 2);
             engine = new ExecutionStrategyEngine(registry, context, 16);
             intentDecoder = intent(9001L, 7, 2);
+            threadBean = (com.sun.management.ThreadMXBean)ManagementFactory.getThreadMXBean();
+            if (!threadBean.isThreadAllocatedMemorySupported()) {
+                throw new IllegalStateException("Thread allocation measurement is not supported by this JVM");
+            }
+            threadBean.setThreadAllocatedMemoryEnabled(true);
+            threadId = Thread.currentThread().threadId();
+            allocationProbeOverheadBytes = allocationProbeOverheadBytes();
+            allocationCheckWarmupInvocations = ALLOCATION_CHECK_WARMUP_INVOCATIONS;
         }
+
+        long assertNoAllocation(final AllocationCounters counters, final long allocatedBytes) {
+            if (allocationCheckWarmupInvocations > 0) {
+                allocationCheckWarmupInvocations--;
+                return allocatedBytes;
+            }
+            if (allocatedBytes != 0L) {
+                throw new AssertionError("ExecutionStrategyEngine parent intent dispatch allocated " + allocatedBytes + " bytes");
+            }
+            counters.measuredThreadAllocatedBytes += allocatedBytes;
+            return allocatedBytes;
+        }
+
+        private long allocationProbeOverheadBytes() {
+            long overheadBytes = 0L;
+            for (int i = 0; i < 16; i++) {
+                final long before = threadBean.getThreadAllocatedBytes(threadId);
+                final long allocatedBytes = threadBean.getThreadAllocatedBytes(threadId) - before;
+                overheadBytes = Math.max(overheadBytes, allocatedBytes);
+            }
+            return overheadBytes;
+        }
+    }
+
+    @AuxCounters(AuxCounters.Type.EVENTS)
+    @State(Scope.Thread)
+    public static class AllocationCounters {
+        public long measuredThreadAllocatedBytes;
     }
 
     private static ParentOrderIntentDecoder intent(final long parentOrderId, final int strategyId, final int executionStrategyId) {
@@ -100,7 +150,8 @@ public class ExecutionStrategyEngineBenchmark {
             .legCount((byte)1)
             .leg2Side(Side.SELL)
             .leg2LimitPriceScaled(0L)
-            .parentTimeoutMicros(0L);
+            .parentTimeoutMicros(0L)
+            .venueSetId(0);
         final ParentOrderIntentDecoder decoder = new ParentOrderIntentDecoder();
         decoder.wrapAndApplyHeader(buffer, 0, new MessageHeaderDecoder());
         return decoder;

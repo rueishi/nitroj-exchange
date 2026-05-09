@@ -72,6 +72,13 @@ public final class ExecutionStrategyRegistry {
         return strategies.length;
     }
 
+    public void allowV14DefaultCompatibility() {
+        allowCompatibility(ig.rueishi.nitroj.exchange.common.Ids.STRATEGY_INVENTORY_HEDGE,
+            ig.rueishi.nitroj.exchange.common.ExecutionStrategyIds.PARALLEL_VENUE);
+        allowCompatibility(ig.rueishi.nitroj.exchange.common.Ids.STRATEGY_INVENTORY_HEDGE,
+            ig.rueishi.nitroj.exchange.common.ExecutionStrategyIds.SMART_ORDER_ROUTING);
+    }
+
     private void validateTradingStrategyId(final int id) {
         if (id < 0 || id >= compatibility.length) {
             throw new IllegalArgumentException("trading strategy id out of range: " + id);
