@@ -74,6 +74,7 @@ public final class MarketMakingStrategy implements Strategy {
     private long lastRejectionTimeMicros;
     private long lastTradePriceScaled;
     private long nextQuoteClOrdId;
+    private long parentSubmitRejects;
 
     public MarketMakingStrategy(final MarketMakingConfig config) {
         this.config = Objects.requireNonNull(config, "config");
@@ -286,10 +287,13 @@ public final class MarketMakingStrategy implements Strategy {
             .legCount((byte) 1)
             .leg2Side(Side.SELL)
             .leg2LimitPriceScaled(0L)
-            .parentTimeoutMicros(0L);
+            .parentTimeoutMicros(0L)
+            .venueSetId(0);
         parentIntentDecoder.wrapAndApplyHeader(egressBuffer, 0, headerDecoder);
-        if (executionEngine != null) {
-            executionEngine.submit(parentIntentDecoder);
+        if (executionEngine == null || !executionEngine.submit(parentIntentDecoder)) {
+            parentSubmitRejects++;
+            suppress(REJECTION_COOLDOWN_MICROS);
+            return;
         }
         if (side == Side.BUY) {
             liveBidClOrdId = parentOrderId;
@@ -329,4 +333,5 @@ public final class MarketMakingStrategy implements Strategy {
     int consecutiveRejections() { return consecutiveRejections; }
     long lastRejectionTimeMicros() { return lastRejectionTimeMicros; }
     long lastTradePriceScaled() { return lastTradePriceScaled; }
+    long parentSubmitRejects() { return parentSubmitRejects; }
 }

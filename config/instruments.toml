@@ -4,6 +4,15 @@
 # registry and strategy wiring can agree on immutable instrument IDs. Decimal
 # sizes are strings to avoid TOML floating-point conversion before Java fixed
 # point parsing.
+#
+# V14 venue identity decision:
+# BTC-USD on Coinbase and BTCUSDT on Binance are deliberately separate internal
+# instruments. USD and USDT are not fungible in NitroJEx accounting, risk, or
+# strategy state, so the platform must not consolidate their books or allow
+# automatic arbitrage between them. A future release that wants consolidation
+# must introduce an explicit product-alias/risk-conversion layer, prove replay
+# determinism for the conversion, and update strategy eligibility rules before
+# mapping both venue symbols to one instrumentId.
 
 [[instrument]]
 id            = 1
@@ -15,6 +24,11 @@ lotSize       = "0.00001"
 priceScale    = 100000000
 qtyScale      = 100000000
 
+[[instrument.venue]]
+venueId       = 1
+venueSymbol   = "BTC-USD"
+identityKey   = "BTC-USD-COINBASE"
+
 [[instrument]]
 id            = 2
 symbol        = "ETH-USD"
@@ -24,3 +38,23 @@ tickSize      = "0.01"
 lotSize       = "0.0001"
 priceScale    = 100000000
 qtyScale      = 100000000
+
+[[instrument.venue]]
+venueId       = 1
+venueSymbol   = "ETH-USD"
+identityKey   = "ETH-USD-COINBASE"
+
+[[instrument]]
+id            = 3
+symbol        = "BTCUSDT"
+baseCurrency  = "BTC"
+quoteCurrency = "USDT"
+tickSize      = "0.01"
+lotSize       = "0.00001"
+priceScale    = 100000000
+qtyScale      = 100000000
+
+[[instrument.venue]]
+venueId       = 2
+venueSymbol   = "BTCUSDT"
+identityKey   = "BTC-USDT-BINANCE"

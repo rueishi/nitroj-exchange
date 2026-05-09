@@ -10,6 +10,8 @@ import ig.rueishi.nitroj.exchange.common.MarketDataModel;
 import ig.rueishi.nitroj.exchange.common.VenueCapabilities;
 import ig.rueishi.nitroj.exchange.common.VenueConfig;
 import ig.rueishi.nitroj.exchange.gateway.venue.StandardOrderEntryAdapter;
+import ig.rueishi.nitroj.exchange.gateway.venue.binance.BinanceL2MarketDataNormalizer;
+import ig.rueishi.nitroj.exchange.gateway.venue.binance.BinanceVenuePlugin;
 import ig.rueishi.nitroj.exchange.gateway.venue.coinbase.CoinbaseL2MarketDataNormalizer;
 import ig.rueishi.nitroj.exchange.gateway.venue.coinbase.CoinbaseL3MarketDataNormalizer;
 import ig.rueishi.nitroj.exchange.gateway.venue.coinbase.CoinbaseVenuePlugin;
@@ -143,6 +145,43 @@ final class GatewayMainTest {
     }
 
     @Test
+    void buildVenueRuntime_binanceVenue_composesFix44L2Runtime() {
+        try (GatewayDisruptor disruptor = testDisruptor()) {
+            final GatewayConfig base = GatewayConfig.forTest();
+            final GatewayConfig config = GatewayConfig.builder()
+                .venueId(Ids.VENUE_BINANCE)
+                .nodeRole(base.nodeRole())
+                .aeronDir(base.aeronDir())
+                .logDir(base.logDir())
+                .clusterIngressChannel(base.clusterIngressChannel())
+                .clusterEgressChannel(base.clusterEgressChannel())
+                .clusterMembers(base.clusterMembers())
+                .fix(base.fix())
+                .credentials(base.credentials())
+                .rest(base.rest())
+                .cpu(base.cpu())
+                .disruptor(base.disruptor())
+                .counterFileDir(base.counterFileDir())
+                .histogramOutputMs(base.histogramOutputMs())
+                .warmup(base.warmup())
+                .build();
+
+            final VenueRuntime runtime = GatewayMain.buildVenueRuntime(
+                config,
+                List.of(binanceVenue()),
+                binanceRegistry(),
+                disruptor,
+                encoder -> 1L,
+                (clOrdId, venueId, instrumentId) -> { });
+
+            assertThat(runtime.fixPlugin().id()).isEqualTo(FixPluginId.FIX_44);
+            assertThat(runtime.marketDataNormalizer()).isInstanceOf(BinanceL2MarketDataNormalizer.class);
+            assertThat(runtime.venuePlugin()).isInstanceOf(BinanceVenuePlugin.class);
+            assertThat(runtime.venue().id()).isEqualTo(Ids.VENUE_BINANCE);
+        }
+    }
+
+    @Test
     void buildVenueRuntime_unsupportedVenuePlugin_failsClearly() {
         try (GatewayDisruptor disruptor = testDisruptor()) {
             assertThatThrownBy(() -> GatewayMain.buildVenueRuntime(
@@ -212,6 +251,27 @@ final class GatewayMainTest {
         registry.init(
             List.of(venue(MarketDataModel.L3, CoinbaseVenuePlugin.ID)),
             List.of(new InstrumentConfig(Ids.INSTRUMENT_BTC_USD, "BTC-USD", "BTC", "USD")));
+        return registry;
+    }
+
+    private static VenueConfig binanceVenue() {
+        return new VenueConfig(
+            Ids.VENUE_BINANCE,
+            "BINANCE",
+            "fix-oe.binance.com",
+            9000,
+            false,
+            FixPluginId.FIX_44,
+            BinanceVenuePlugin.ID,
+            MarketDataModel.L2,
+            new VenueCapabilities(true, true, false));
+    }
+
+    private static IdRegistryImpl binanceRegistry() {
+        final IdRegistryImpl registry = new IdRegistryImpl();
+        registry.init(
+            List.of(binanceVenue()),
+            List.of(new InstrumentConfig(Ids.INSTRUMENT_BTC_USD, "BTCUSDT", "BTC", "USDT")));
         return registry;
     }
 

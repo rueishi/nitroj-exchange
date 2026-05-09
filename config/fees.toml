@@ -1,0 +1,7 @@
+[venue.1]
+makerFeeBps = 0
+takerFeeBps = 6
+
+[venue.2]
+makerFeeBps = 0
+takerFeeBps = 10

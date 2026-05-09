@@ -47,7 +47,7 @@ public class LogonDecoder extends CommonDecoderImpl implements MessageDecoder, A
         }
     }
 
-    private final IntHashSet alreadyVisitedFields = new IntHashSet(14);
+    private final IntHashSet alreadyVisitedFields = new IntHashSet(18);
 
     private final IntHashSet unknownFields = new IntHashSet(10);
 
@@ -112,7 +112,7 @@ public class LogonDecoder extends CommonDecoderImpl implements MessageDecoder, A
 
     public static final byte[] MESSAGE_TYPE_BYTES = MESSAGE_TYPE_AS_STRING.getBytes(US_ASCII);
 
-    public final IntHashSet messageFields = new IntHashSet(46);
+    public final IntHashSet messageFields = new IntHashSet(50);
 
     {
         messageFields.add(Constants.BEGIN_STRING);
@@ -135,7 +135,9 @@ public class LogonDecoder extends CommonDecoderImpl implements MessageDecoder, A
         messageFields.add(Constants.RAW_DATA_LENGTH);
         messageFields.add(Constants.RAW_DATA);
         messageFields.add(Constants.RESET_SEQ_NUM_FLAG);
+        messageFields.add(Constants.USERNAME);
         messageFields.add(Constants.PASSWORD);
+        messageFields.add(Constants.MESSAGE_HANDLING);
         messageFields.add(Constants.CANCEL_ORDERS_ON_DISCONNECT);
         messageFields.add(Constants.CHECK_SUM);
     }
@@ -244,6 +246,61 @@ public class LogonDecoder extends CommonDecoderImpl implements MessageDecoder, A
 
 
 
+    private char[] username = new char[1];
+
+    private boolean hasUsername;
+
+    /* Username = 553 */
+    public char[] username()
+    {
+        if (!hasUsername)
+        {
+            throw new IllegalArgumentException("No value for optional field: Username");
+        }
+
+        return username;
+    }
+
+    public boolean hasUsername()
+    {
+        return hasUsername;
+    }
+
+
+    private int usernameOffset;
+
+    private int usernameLength;
+
+    /* Username = 553 */
+    public int usernameLength()
+    {
+        if (!hasUsername)
+        {
+            throw new IllegalArgumentException("No value for optional field: Username");
+        }
+
+        return usernameLength;
+    }
+
+    /* Username = 553 */
+    public String usernameAsString()
+    {
+        return hasUsername ? new String(username, 0, usernameLength) : null;
+    }
+
+    /* Username = 553 */
+    public AsciiSequenceView username(final AsciiSequenceView view)
+    {
+        if (!hasUsername)
+        {
+            throw new IllegalArgumentException("No value for optional field: Username");
+        }
+
+        return view.wrap(buffer, usernameOffset, usernameLength);
+    }
+
+
+    private final CharArrayWrapper usernameWrapper = new CharArrayWrapper();
     private char[] password = new char[1];
 
     private boolean hasPassword;
@@ -299,6 +356,28 @@ public class LogonDecoder extends CommonDecoderImpl implements MessageDecoder, A
 
 
     private final CharArrayWrapper passwordWrapper = new CharArrayWrapper();
+    private int messageHandling = MISSING_INT;
+
+    private boolean hasMessageHandling;
+
+    /* MessageHandling = 25035 */
+    public int messageHandling()
+    {
+        if (!hasMessageHandling)
+        {
+            throw new IllegalArgumentException("No value for optional field: MessageHandling");
+        }
+
+        return messageHandling;
+    }
+
+    public boolean hasMessageHandling()
+    {
+        return hasMessageHandling;
+    }
+
+
+
     private char cancelOrdersOnDisconnect = MISSING_CHAR;
 
     private int cancelOrdersOnDisconnectLength = 0;
@@ -333,34 +412,9 @@ public class LogonDecoder extends CommonDecoderImpl implements MessageDecoder, A
         throw new UnsupportedOperationException();
     }
 
-    public char[] username()
-    {
-        throw new UnsupportedOperationException();
-    }
-
-    public boolean hasUsername()
-    {
-        throw new UnsupportedOperationException();
-    }
-
-    public int usernameLength()
-    {
-        throw new UnsupportedOperationException();
-    }
-
-    public String usernameAsString()
-    {
-        throw new UnsupportedOperationException();
-    }
-
-    public AsciiSequenceView username(final AsciiSequenceView view)
-    {
-        throw new UnsupportedOperationException();
-    }
-
     public boolean supportsUsername()
     {
-        return false;
+        return true;
     }
 
     public boolean supportsPassword()
@@ -458,11 +512,23 @@ public class LogonDecoder extends CommonDecoderImpl implements MessageDecoder, A
                 resetSeqNumFlagLength = valueLength;
                 break;
 
+            case Constants.USERNAME:
+                hasUsername = true;
+                username = buffer.getChars(username, valueOffset, valueLength);
+                usernameOffset = valueOffset;
+                usernameLength = valueLength;
+                break;
+
             case Constants.PASSWORD:
                 hasPassword = true;
                 password = buffer.getChars(password, valueOffset, valueLength);
                 passwordOffset = valueOffset;
                 passwordLength = valueLength;
+                break;
+
+            case Constants.MESSAGE_HANDLING:
+                hasMessageHandling = true;
+                messageHandling = getInt(buffer, valueOffset, endOfField, 25035, CODEC_VALIDATION_ENABLED);
                 break;
 
             case Constants.CANCEL_ORDERS_ON_DISCONNECT:
@@ -522,7 +588,9 @@ public class LogonDecoder extends CommonDecoderImpl implements MessageDecoder, A
         this.resetRawDataLength();
         this.resetRawData();
         this.resetResetSeqNumFlag();
+        this.resetUsername();
         this.resetPassword();
+        this.resetMessageHandling();
         this.resetCancelOrdersOnDisconnect();
     }
 
@@ -551,9 +619,19 @@ public class LogonDecoder extends CommonDecoderImpl implements MessageDecoder, A
         hasResetSeqNumFlag = false;
     }
 
+    public void resetUsername()
+    {
+        hasUsername = false;
+    }
+
     public void resetPassword()
     {
         hasPassword = false;
+    }
+
+    public void resetMessageHandling()
+    {
+        hasMessageHandling = false;
     }
 
     public void resetCancelOrdersOnDisconnect()
@@ -612,11 +690,27 @@ public class LogonDecoder extends CommonDecoderImpl implements MessageDecoder, A
             builder.append("\",\n");
         }
 
+        if (hasUsername())
+        {
+            indent(builder, level);
+            builder.append("\"Username\": \"");
+            builder.append(this.username(), 0, usernameLength());
+            builder.append("\",\n");
+        }
+
         if (hasPassword())
         {
             indent(builder, level);
             builder.append("\"Password\": \"");
             builder.append(this.password(), 0, passwordLength());
+            builder.append("\",\n");
+        }
+
+        if (hasMessageHandling())
+        {
+            indent(builder, level);
+            builder.append("\"MessageHandling\": \"");
+            builder.append(messageHandling);
             builder.append("\",\n");
         }
 
@@ -655,9 +749,19 @@ public class LogonDecoder extends CommonDecoderImpl implements MessageDecoder, A
             encoder.resetSeqNumFlag(this.resetSeqNumFlag());
         }
 
+        if (hasUsername())
+        {
+            encoder.username(this.username(), 0, usernameLength());
+        }
+
         if (hasPassword())
         {
             encoder.password(this.password(), 0, passwordLength());
+        }
+
+        if (hasMessageHandling())
+        {
+            encoder.messageHandling(this.messageHandling());
         }
 
         encoder.cancelOrdersOnDisconnect(this.cancelOrdersOnDisconnect());        return encoder;

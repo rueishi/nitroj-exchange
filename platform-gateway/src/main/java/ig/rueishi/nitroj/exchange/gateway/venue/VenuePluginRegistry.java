@@ -2,6 +2,7 @@ package ig.rueishi.nitroj.exchange.gateway.venue;
 
 import java.util.Map;
 import java.util.Objects;
+import ig.rueishi.nitroj.exchange.gateway.venue.binance.BinanceVenuePlugin;
 import ig.rueishi.nitroj.exchange.gateway.venue.coinbase.CoinbaseVenuePlugin;
 
 /**
@@ -23,7 +24,9 @@ public final class VenuePluginRegistry {
      * Creates the default registry with currently supported venue plugins.
      */
     public VenuePluginRegistry() {
-        this(Map.of(CoinbaseVenuePlugin.ID, new CoinbaseVenuePlugin()));
+        this(Map.of(
+            CoinbaseVenuePlugin.ID, new CoinbaseVenuePlugin(),
+            BinanceVenuePlugin.ID, new BinanceVenuePlugin()));
     }
 
     /**

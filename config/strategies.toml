@@ -23,9 +23,16 @@ venueId = 1
 # Optional per-instrument/per-venue override. Use this only when the same
 # trading intent should be worked differently for one instrument or venue.
   [[strategy.executionOverride]]
-  instrumentId = 2
+  instrumentId = 1
   venueId = 1
   executionStrategy = "PostOnlyQuote"
+
+[[strategy]]
+id = "mm-btc-binance"
+type = "MarketMaking"
+executionStrategy = "PostOnlyQuote"
+instrumentId = 3
+venueId = 2
 
 [[strategy]]
 id = "arb-btc-cross-venue"
@@ -33,3 +40,35 @@ type = "Arb"
 executionStrategy = "MultiLegContingent"
 instrumentId = 1
 venueIds = [1, 2]
+# V14 cross-venue arb is explicitly configured and must not be inferred from
+# USD/USDT symbol similarity. The active strategy is allowed to compare the
+# configured Coinbase/Binance venue pair only when operators provide an explicit
+# strategy entry; TASK-407 still prevents automatic BTC-USD/BTCUSDT book
+# consolidation elsewhere.
+instrumentPair = ["BTC-USD-COINBASE", "BTC-USDT-BINANCE"]
+
+[[strategy]]
+id = "hedge-btc-coinbase"
+type = "InventoryHedge"
+instrument = "BTC-USD-COINBASE"
+venueSetId = 1
+venueSet = ["COINBASE"]
+thresholdMode = "base_quantity"
+thresholdValue = 1.0
+exposureMode = "filled_plus_working"
+safeBandValue = 0.5
+cooldownMicros = 30000000
+executionStrategy = "ParallelVenue"
+
+[[strategy]]
+id = "hedge-btc-binance"
+type = "InventoryHedge"
+instrument = "BTC-USDT-BINANCE"
+venueSetId = 2
+venueSet = ["BINANCE"]
+thresholdMode = "notional"
+thresholdValue = 50000.0
+exposureMode = "filled_plus_working"
+safeBandValue = 25000.0
+cooldownMicros = 30000000
+executionStrategy = "SOR"

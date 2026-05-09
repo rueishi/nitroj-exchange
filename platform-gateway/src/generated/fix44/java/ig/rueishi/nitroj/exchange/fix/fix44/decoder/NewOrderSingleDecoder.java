@@ -50,7 +50,7 @@ public class NewOrderSingleDecoder extends CommonDecoderImpl implements MessageD
         }
     }
 
-    private final IntHashSet alreadyVisitedFields = new IntHashSet(22);
+    private final IntHashSet alreadyVisitedFields = new IntHashSet(24);
 
     private final IntHashSet unknownFields = new IntHashSet(10);
 
@@ -128,6 +128,16 @@ public class NewOrderSingleDecoder extends CommonDecoderImpl implements MessageD
             return false;
         }
         }
+
+        if (hasSelfTradePreventionMode)
+        {
+        if (CODEC_VALIDATION_ENABLED && selfTradePreventionModeLength > 1)
+        {
+            invalidTagId = 25001;
+            rejectReason = 5;
+            return false;
+        }
+        }
         return true;
     }
 
@@ -139,7 +149,7 @@ public class NewOrderSingleDecoder extends CommonDecoderImpl implements MessageD
 
     public static final byte[] MESSAGE_TYPE_BYTES = MESSAGE_TYPE_AS_STRING.getBytes(US_ASCII);
 
-    public final IntHashSet messageFields = new IntHashSet(54);
+    public final IntHashSet messageFields = new IntHashSet(56);
 
     {
         messageFields.add(Constants.BEGIN_STRING);
@@ -168,6 +178,7 @@ public class NewOrderSingleDecoder extends CommonDecoderImpl implements MessageD
         messageFields.add(Constants.PRICE);
         messageFields.add(Constants.TIME_IN_FORCE);
         messageFields.add(Constants.SELF_TRADE_TYPE);
+        messageFields.add(Constants.SELF_TRADE_PREVENTION_MODE);
         messageFields.add(Constants.CHECK_SUM);
     }
 
@@ -464,6 +475,32 @@ public class NewOrderSingleDecoder extends CommonDecoderImpl implements MessageD
 
 
 
+    private char selfTradePreventionMode = MISSING_CHAR;
+
+    private int selfTradePreventionModeLength = 0;
+    public int selfTradePreventionModeLength()    {
+       return selfTradePreventionModeLength;
+    }
+    private boolean hasSelfTradePreventionMode;
+
+    /* SelfTradePreventionMode = 25001 */
+    public char selfTradePreventionMode()
+    {
+        if (!hasSelfTradePreventionMode)
+        {
+            throw new IllegalArgumentException("No value for optional field: SelfTradePreventionMode");
+        }
+
+        return selfTradePreventionMode;
+    }
+
+    public boolean hasSelfTradePreventionMode()
+    {
+        return hasSelfTradePreventionMode;
+    }
+
+
+
     public int decode(final AsciiBuffer buffer, final int offset, final int length)
     {
         // Decode NewOrderSingle
@@ -580,6 +617,12 @@ public class NewOrderSingleDecoder extends CommonDecoderImpl implements MessageD
                 selfTradeTypeLength = valueLength;
                 break;
 
+            case Constants.SELF_TRADE_PREVENTION_MODE:
+                hasSelfTradePreventionMode = true;
+                selfTradePreventionMode = buffer.getChar(valueOffset);
+                selfTradePreventionModeLength = valueLength;
+                break;
+
             default:
                 if (!CODEC_REJECT_UNKNOWN_FIELD_ENABLED)
                 {
@@ -638,6 +681,7 @@ public class NewOrderSingleDecoder extends CommonDecoderImpl implements MessageD
         this.resetPrice();
         this.resetTimeInForce();
         this.resetSelfTradeType();
+        this.resetSelfTradePreventionMode();
     }
 
     public void resetAccount()
@@ -696,6 +740,11 @@ public class NewOrderSingleDecoder extends CommonDecoderImpl implements MessageD
     public void resetSelfTradeType()
     {
         hasSelfTradeType = false;
+    }
+
+    public void resetSelfTradePreventionMode()
+    {
+        hasSelfTradePreventionMode = false;
     }
 
     public String toString()
@@ -781,6 +830,14 @@ public class NewOrderSingleDecoder extends CommonDecoderImpl implements MessageD
             builder.append(selfTradeType);
             builder.append("\",\n");
         }
+
+        if (hasSelfTradePreventionMode())
+        {
+            indent(builder, level);
+            builder.append("\"SelfTradePreventionMode\": \"");
+            builder.append(selfTradePreventionMode);
+            builder.append("\",\n");
+        }
         indent(builder, level - 1);
         builder.append("}");
         return builder;
@@ -819,6 +876,11 @@ public class NewOrderSingleDecoder extends CommonDecoderImpl implements MessageD
         if (hasSelfTradeType())
         {
             encoder.selfTradeType(this.selfTradeType());
+        }
+
+        if (hasSelfTradePreventionMode())
+        {
+            encoder.selfTradePreventionMode(this.selfTradePreventionMode());
         }
         return encoder;
     }

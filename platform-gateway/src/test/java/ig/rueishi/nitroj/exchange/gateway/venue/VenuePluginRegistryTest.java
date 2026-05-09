@@ -5,6 +5,7 @@ import ig.rueishi.nitroj.exchange.common.FixPluginId;
 import ig.rueishi.nitroj.exchange.common.MarketDataModel;
 import ig.rueishi.nitroj.exchange.common.VenueCapabilities;
 import ig.rueishi.nitroj.exchange.common.VenueConfig;
+import ig.rueishi.nitroj.exchange.gateway.venue.binance.BinanceVenuePlugin;
 import ig.rueishi.nitroj.exchange.gateway.venue.coinbase.CoinbaseVenuePlugin;
 import org.junit.jupiter.api.Test;
 
@@ -36,6 +37,14 @@ final class VenuePluginRegistryTest {
 
         assertThat(plugin).isInstanceOf(CoinbaseVenuePlugin.class);
         assertThat(plugin.id()).isEqualTo("COINBASE");
+    }
+
+    @Test
+    void get_binance_returnsBinancePlugin() {
+        final VenuePlugin plugin = new VenuePluginRegistry().get("BINANCE");
+
+        assertThat(plugin).isInstanceOf(BinanceVenuePlugin.class);
+        assertThat(plugin.id()).isEqualTo("BINANCE");
     }
 
     /**
@@ -88,6 +97,15 @@ final class VenuePluginRegistryTest {
             FixPluginId.FIXT11_FIX50SP2, "COINBASE", MarketDataModel.L3, capabilities);
 
         assertThat(new CoinbaseVenuePlugin().capabilities(venue)).isSameAs(capabilities);
+    }
+
+    @Test
+    void capabilities_binance_requiresVenueIdTwoFix44AndL2() {
+        final VenueCapabilities capabilities = new VenueCapabilities(true, true, false);
+        final VenueConfig venue = new VenueConfig(2, "BINANCE", "fix-oe.binance.com", 9000, false,
+            FixPluginId.FIX_44, "BINANCE", MarketDataModel.L2, capabilities);
+
+        assertThat(new BinanceVenuePlugin().capabilities(venue)).isSameAs(capabilities);
     }
 
     /**

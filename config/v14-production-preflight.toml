@@ -1,0 +1,57 @@
+# NitroJEx V14 production preflight evidence checklist.
+#
+# This file is an operator-facing release record, not runtime configuration.
+# Real Coinbase and Binance QA/UAT remain blocked until every automated gate
+# below passes and every manual evidence item is attached to the release bundle.
+
+version = "V14.0"
+qaUatStatus = "blocked"
+qaUatBlocker = "V12, V13, and V14 automated gates plus manual operational evidence must be complete before real Coinbase or Binance QA/UAT."
+
+automatedGates = [
+  "JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew clean",
+  "JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew check",
+  "JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew e2eTest",
+  "JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew :platform-benchmarks:jmh",
+  "JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew :platform-benchmarks:jmhLatencyReport",
+  "JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 scripts/v14-preflight-check.sh"
+]
+
+requiredEvidence = [
+  "V12 preflight evidence bundle remains attached and valid",
+  "V13 preflight evidence bundle remains attached and valid",
+  "Binance Spot venue ID 2 config and dedicated gateway evidence",
+  "Binance Ed25519 credential handling, rotation rehearsal, and FIX session signoff",
+  "Binance L2 snapshot, incremental, gap, malformed, disconnect, and reconnect evidence",
+  "mixed-precision Coinbase BTC-USD and Binance BTCUSDT instrument identity evidence",
+  "cross-venue ArbStrategy mixed-precision evidence with no implicit USD/USDT basis arb",
+  "InventoryHedgeStrategy threshold, active-parent gating, cooldown, and replay evidence",
+  "Hedge x ParallelVenue live-wire evidence",
+  "Hedge x SOR live-wire evidence including re-slice and RESLICE_FAILED paths",
+  "parallel multi-venue MarketMakingStrategy evidence",
+  "two-venue partial-outage and reconciliation evidence",
+  "parent/execution JMH allocation report for every V14 spec section 11.2 surface",
+  "parent/execution JMH latency percentile report for V14 dispatch and re-slice surfaces",
+  "deterministic replay evidence for mixed precision, SOR re-slice, and V13-to-V14 equivalence",
+  "rollback-to-V13 rehearsal evidence",
+  "monitoring, alert routing, failover, disaster recovery, deployment, and shadow-mode signoff"
+]
+
+runbooks = [
+  "README.md#hedge-stuck",
+  "README.md#hedge-cooldown-stuck",
+  "README.md#parallel-venue-partial-outage",
+  "README.md#sor-re-slice-loop",
+  "README.md#fee-schedule-misconfiguration",
+  "README.md#rollback-to-v13"
+]
+
+nonGoals = [
+  "no WebSocket transport",
+  "no derivatives",
+  "no shared FIX 4.4 protocol plugin rewrite",
+  "no SBE schema change",
+  "no RiskEngine semantic change",
+  "no USD/USDT basis conversion or automatic basis arbitrage",
+  "no REST fee refresh in SmartOrderRoutingExecution"
+]

@@ -9,22 +9,27 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Tests the executable V12 hot/cold allocation boundary and benchmark ownership gate.
+ * Tests the executable hot/cold allocation boundary and benchmark ownership gate.
  */
 final class AllocationPolicyTest {
     private static final Set<String> REQUIRED_IMPLEMENTED_BENCHMARK_OWNERS = Set.of(
         "BookMutationBenchmark",
+        "BinanceL2NormalizerBenchmark",
+        "BinanceOrderEntryPolicyBenchmark",
         "ExecutionReportBenchmark",
         "ExecutionStrategyEngineBenchmark",
         "FixL2NormalizerBenchmark",
         "FixL3NormalizerBenchmark",
         "GatewayHandoffBenchmark",
+        "InventoryHedgeStrategyBenchmark",
         "OrderEncodingBenchmark",
         "OrderManagerBenchmark",
         "OwnLiquidityBenchmark",
         "ParentOrderRegistryBenchmark",
+        "ParallelVenueExecutionBenchmark",
         "RiskDecisionBenchmark",
         "SbeCodecBenchmark",
+        "SmartOrderRoutingExecutionBenchmark",
         "StrategyTickBenchmark"
     );
 
@@ -91,6 +96,21 @@ final class AllocationPolicyTest {
                 AllocationPolicy.HotPath.PARENT_ORDER_REGISTRY_UPDATE_QUERY,
                 AllocationPolicy.HotPath.PARENT_ACTIVE_CHILD_LOOKUP,
                 AllocationPolicy.HotPath.EXECUTION_STRATEGY_ENGINE_DISPATCH,
+                AllocationPolicy.HotPath.INVENTORY_HEDGE_MARKET_DATA_TICK,
+                AllocationPolicy.HotPath.INVENTORY_HEDGE_PORTFOLIO_UPDATE,
+                AllocationPolicy.HotPath.INVENTORY_HEDGE_PARENT_INTENT_EMISSION,
+                AllocationPolicy.HotPath.PARALLEL_VENUE_PARENT_INTENT,
+                AllocationPolicy.HotPath.PARALLEL_VENUE_SLICE_PLAN,
+                AllocationPolicy.HotPath.PARALLEL_VENUE_CHILD_EXECUTION,
+                AllocationPolicy.HotPath.PARALLEL_VENUE_TIMER,
+                AllocationPolicy.HotPath.SMART_ORDER_ROUTING_PARENT_INTENT,
+                AllocationPolicy.HotPath.SMART_ORDER_ROUTING_SLICE_PLAN,
+                AllocationPolicy.HotPath.SMART_ORDER_ROUTING_RESLICE,
+                AllocationPolicy.HotPath.SMART_ORDER_ROUTING_CHILD_EXECUTION,
+                AllocationPolicy.HotPath.SMART_ORDER_ROUTING_TIMER,
+                AllocationPolicy.HotPath.MIXED_PRECISION_OWN_ORDER_OVERLAY_QUERY,
+                AllocationPolicy.HotPath.BINANCE_L2_NORMALIZER_SBE_EVENT_PRODUCTION,
+                AllocationPolicy.HotPath.BINANCE_ORDER_ENTRY_POLICY_ENRICHMENT,
                 AllocationPolicy.HotPath.ORDER_COMMAND_ENCODING);
         assertThat(EnumSet.allOf(AllocationPolicy.ColdPath.class))
             .contains(

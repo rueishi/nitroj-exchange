@@ -3,14 +3,18 @@ package ig.rueishi.nitroj.exchange.cluster;
 import ig.rueishi.nitroj.exchange.common.Ids;
 import ig.rueishi.nitroj.exchange.common.OrderStatus;
 import ig.rueishi.nitroj.exchange.common.RiskConfig;
+import ig.rueishi.nitroj.exchange.common.ExecutionStrategyIds;
 import ig.rueishi.nitroj.exchange.execution.ChildExecutionView;
 import ig.rueishi.nitroj.exchange.execution.ExecutionStrategyContext;
+import ig.rueishi.nitroj.exchange.execution.FeeSchedule;
 import ig.rueishi.nitroj.exchange.execution.ImmediateLimitExecution;
 import ig.rueishi.nitroj.exchange.execution.MultiLegContingentExecution;
 import ig.rueishi.nitroj.exchange.execution.ParentOrderIntentView;
 import ig.rueishi.nitroj.exchange.execution.ParentOrderRegistry;
 import ig.rueishi.nitroj.exchange.execution.ParentOrderState;
+import ig.rueishi.nitroj.exchange.execution.ParallelVenueExecution;
 import ig.rueishi.nitroj.exchange.execution.PostOnlyQuoteExecution;
+import ig.rueishi.nitroj.exchange.execution.SmartOrderRoutingExecution;
 import ig.rueishi.nitroj.exchange.messages.BooleanType;
 import ig.rueishi.nitroj.exchange.messages.CancelOrderCommandEncoder;
 import ig.rueishi.nitroj.exchange.messages.EntryType;
@@ -158,11 +162,33 @@ final class DeterministicReplayTest {
             "POST_SUBMIT:5001",
             "POST_PARTIAL:3",
             "POST_REJECT_RETRY:5002",
+            "IMM_VENUE_SET:17",
             "IMM_RISK_REJECT:4",
             "MULTI_TIMER:7000",
             "MULTI_HEDGE_FAILED:6",
             "SNAPSHOT:3/2",
             "CAPACITY:1");
+    }
+
+    @Test
+    void v14VenueIndifferentReplay_sameOrderedStreamProducesIdenticalHedgeSorAndCommandSummaries() {
+        final V14ReplayResult first = V14ReplayHarness.apply();
+        final V14ReplayResult second = V14ReplayHarness.apply();
+
+        assertThat(second).isEqualTo(first);
+        assertThat(first.commands).contains(
+            "PAR_CHILD:90001:1:60",
+            "PAR_CHILD:90002:2:40",
+            "SOR_INITIAL:91001:1",
+            "SOR_RESLICE:91101:2",
+            "MM_CHILDREN:92000/93000",
+            "SNAPSHOT_PARENT:9100",
+            "CAPACITY_COUNTER:1");
+        assertThat(first.sorReslices).isEqualTo(1L);
+        assertThat(first.parallelParentStatus).isEqualTo(ParentOrderState.WORKING);
+        assertThat(first.sorActiveChildren).isEqualTo(1);
+        assertThat(first.coinbaseExternalSize).isEqualTo(7L);
+        assertThat(first.binanceExternalSize).isEqualTo(11L);
     }
 
     private record ReplayEvent(
@@ -287,6 +313,107 @@ final class DeterministicReplayTest {
         List<String> commands) {
     }
 
+    private record V14ReplayResult(
+        byte parallelParentStatus,
+        byte sorParentStatus,
+        long sorReslices,
+        int sorActiveChildren,
+        long coinbaseExternalSize,
+        long binanceExternalSize,
+        long capacityRejects,
+        List<String> commands) {
+    }
+
+    private static final class V14ReplayHarness {
+        private final InternalMarketView marketView = new InternalMarketView(new int[] {1, 2}, new int[] {INSTRUMENT});
+        private final ParentOrderRegistry registry = new ParentOrderRegistry(16, 16);
+        private final OrderManagerImpl orderManager = new OrderManagerImpl();
+        private final ReplayRisk risk = new ReplayRisk();
+        private final UnsafeBuffer commandBuffer = new UnsafeBuffer(new byte[1024]);
+        private final ParallelVenueExecution parallel = new ParallelVenueExecution(1L, 8);
+        private final SmartOrderRoutingExecution sor = new SmartOrderRoutingExecution(1L, 0L, 8, zeroFees());
+        private final PostOnlyQuoteExecution postOnly = new PostOnlyQuoteExecution();
+        private final List<String> commands = new ArrayList<>();
+        private long time = 1L;
+
+        static V14ReplayResult apply() {
+            final V14ReplayHarness harness = new V14ReplayHarness();
+            harness.init();
+            harness.run();
+            return harness.result();
+        }
+
+        private void init() {
+            final ExecutionStrategyContext ctx = new ExecutionStrategyContext(
+                marketView,
+                risk,
+                orderManager,
+                registry,
+                commandBuffer,
+                new MessageHeaderEncoder(),
+                new NewOrderCommandEncoder(),
+                new CancelOrderCommandEncoder(),
+                () -> time,
+                (correlationId, deadlineClusterMicros) -> true,
+                new ReplayIds(),
+                new CountersManager(new UnsafeBuffer(new byte[1024 * 1024]), new UnsafeBuffer(new byte[64 * 1024])));
+            parallel.init(ctx);
+            sor.init(ctx);
+            postOnly.init(ctx);
+        }
+
+        private void run() {
+            marketView.apply(marketData(Ids.VENUE_COINBASE, EntryType.ASK, 100L, 60L), ++time);
+            marketView.apply(marketData(Ids.VENUE_BINANCE, EntryType.ASK, 101L, 40L), ++time);
+            parallel.onParentIntent(hedgeIntent(9_000L, 90_000L, 100L, 101L, ExecutionStrategyIds.PARALLEL_VENUE));
+            commands.add("PAR_CHILD:" + orderManager.getOrder(90_001L).clOrdId() + ":"
+                + orderManager.getOrder(90_001L).venueId() + ":" + orderManager.getOrder(90_001L).qtyScaled());
+            commands.add("PAR_CHILD:" + orderManager.getOrder(90_002L).clOrdId() + ":"
+                + orderManager.getOrder(90_002L).venueId() + ":" + orderManager.getOrder(90_002L).qtyScaled());
+
+            marketView.apply(marketData(Ids.VENUE_COINBASE, EntryType.ASK, 100L, 100L), ++time);
+            marketView.apply(marketData(Ids.VENUE_BINANCE, EntryType.ASK, 105L, 100L), ++time);
+            sor.onParentIntent(hedgeIntent(9_100L, 91_000L, 100L, 110L, ExecutionStrategyIds.SMART_ORDER_ROUTING));
+            commands.add("SOR_INITIAL:" + orderManager.getOrder(91_001L).clOrdId() + ":"
+                + orderManager.getOrder(91_001L).venueId());
+            marketView.apply(marketData(Ids.VENUE_BINANCE, EntryType.ASK, 99L, 100L), ++time);
+            sor.onMarketDataTick(Ids.VENUE_BINANCE, INSTRUMENT, time);
+            commands.add("SOR_RESLICE:" + orderManager.getOrder(91_101L).clOrdId() + ":"
+                + orderManager.getOrder(91_101L).venueId());
+
+            postOnly.onParentIntent(quoteIntent(9_200L, 92_000L, Ids.VENUE_COINBASE, 99L));
+            postOnly.onParentIntent(quoteIntent(9_300L, 93_000L, Ids.VENUE_BINANCE, 98L));
+            commands.add("MM_CHILDREN:" + orderManager.getOrder(92_000L).clOrdId()
+                + "/" + orderManager.getOrder(93_000L).clOrdId());
+
+            marketView.apply(marketData(Ids.VENUE_COINBASE, EntryType.BID, 200L, 7L), ++time);
+            marketView.apply(marketData(Ids.VENUE_BINANCE, EntryType.BID, 201L, 11L), ++time);
+
+            final ParentOrderRegistry.Snapshot snapshot = registry.newSnapshot();
+            registry.snapshotInto(snapshot);
+            final ParentOrderRegistry restored = new ParentOrderRegistry(16, 16);
+            restored.loadFrom(snapshot);
+            commands.add("SNAPSHOT_PARENT:" + restored.lookup(9_100L).parentOrderId());
+
+            final ParentOrderRegistry small = new ParentOrderRegistry(1, 1);
+            small.claim(1L, Ids.STRATEGY_INVENTORY_HEDGE, ExecutionStrategyIds.PARALLEL_VENUE, 1L, time);
+            small.claim(2L, Ids.STRATEGY_INVENTORY_HEDGE, ExecutionStrategyIds.PARALLEL_VENUE, 1L, time);
+            commands.add("CAPACITY_COUNTER:" + small.parentCapacityRejects());
+        }
+
+        private V14ReplayResult result() {
+            return new V14ReplayResult(
+                registry.lookup(9_000L).status(),
+                registry.lookup(9_100L).status(),
+                sor.resliceSuccesses(),
+                registry.activeChildCount(9_100L),
+                marketView.externalLiquidityView().externalSizeAt(Ids.VENUE_COINBASE, INSTRUMENT, EntryType.BID, 200L),
+                marketView.externalLiquidityView().externalSizeAt(Ids.VENUE_BINANCE, INSTRUMENT, EntryType.BID, 201L),
+                registry.parentCapacityRejects(),
+                List.copyOf(commands));
+        }
+    }
+
     private static final class ParentReplayHarness {
         private final InternalMarketView marketView = new InternalMarketView();
         private final ParentOrderRegistry registry = new ParentOrderRegistry(8, 8);
@@ -333,7 +460,10 @@ final class DeterministicReplayTest {
             commands.add("POST_REJECT_RETRY:" + orderManager.getOrder(5_002L).clOrdId());
 
             risk.rejectNonHedge = true;
-            immediate.onParentIntent(parentIntent(4_002L, 5_010L, ParentIntentType.IMMEDIATE_LIMIT, 1, 2_000L, 0, 0L));
+            final ParentOrderIntentView immediateIntent = parentIntent(
+                4_002L, 5_010L, ParentIntentType.IMMEDIATE_LIMIT, 1, 2_000L, 0, 0L, 17);
+            commands.add("IMM_VENUE_SET:" + immediateIntent.venueSetId());
+            immediate.onParentIntent(immediateIntent);
             commands.add("IMM_RISK_REJECT:" + registry.lookup(4_002L).terminalReasonCode());
             risk.rejectNonHedge = false;
 
@@ -378,6 +508,19 @@ final class DeterministicReplayTest {
         final int secondaryVenueId,
         final long leg2Price
     ) {
+        return parentIntent(parentOrderId, correlationId, intentType, executionStrategyId, price, secondaryVenueId, leg2Price, 0);
+    }
+
+    private static ParentOrderIntentView parentIntent(
+        final long parentOrderId,
+        final long correlationId,
+        final ParentIntentType intentType,
+        final int executionStrategyId,
+        final long price,
+        final int secondaryVenueId,
+        final long leg2Price,
+        final int venueSetId
+    ) {
         final UnsafeBuffer buffer = new UnsafeBuffer(new byte[256]);
         new ParentOrderIntentEncoder()
             .wrapAndApplyHeader(buffer, 0, new MessageHeaderEncoder())
@@ -401,10 +544,114 @@ final class DeterministicReplayTest {
             .legCount((byte) (intentType == ParentIntentType.MULTI_LEG ? 2 : 1))
             .leg2Side(Side.SELL)
             .leg2LimitPriceScaled(leg2Price)
-            .parentTimeoutMicros(1_000L);
+            .parentTimeoutMicros(1_000L)
+            .venueSetId(venueSetId);
         final ParentOrderIntentDecoder decoder = new ParentOrderIntentDecoder();
         decoder.wrapAndApplyHeader(buffer, 0, new MessageHeaderDecoder());
         return new ParentOrderIntentView().wrap(decoder);
+    }
+
+    private static ParentOrderIntentView hedgeIntent(
+        final long parentOrderId,
+        final long correlationId,
+        final long qty,
+        final long limit,
+        final int executionStrategyId
+    ) {
+        final UnsafeBuffer buffer = new UnsafeBuffer(new byte[256]);
+        new ParentOrderIntentEncoder()
+            .wrapAndApplyHeader(buffer, 0, new MessageHeaderEncoder())
+            .parentOrderId(parentOrderId)
+            .strategyId((short) Ids.STRATEGY_INVENTORY_HEDGE)
+            .executionStrategyId(executionStrategyId)
+            .intentType(ParentIntentType.HEDGE)
+            .side(Side.BUY)
+            .instrumentId(INSTRUMENT)
+            .primaryVenueId(VENUE)
+            .secondaryVenueId(0)
+            .quantityScaled(qty)
+            .priceMode(PriceMode.LIMIT)
+            .limitPriceScaled(limit)
+            .referencePriceScaled(limit)
+            .timeInForcePreference(TimeInForce.IOC)
+            .urgencyHint((byte) 3)
+            .postOnlyPreference(BooleanType.FALSE)
+            .selfTradePolicy((byte) 1)
+            .correlationId(correlationId)
+            .legCount((byte) 1)
+            .leg2Side(Side.NULL_VAL)
+            .leg2LimitPriceScaled(0L)
+            .parentTimeoutMicros(1_000L)
+            .venueSetId(7);
+        final ParentOrderIntentDecoder decoder = new ParentOrderIntentDecoder();
+        decoder.wrapAndApplyHeader(buffer, 0, new MessageHeaderDecoder());
+        return new ParentOrderIntentView().wrap(decoder);
+    }
+
+    private static ParentOrderIntentView quoteIntent(
+        final long parentOrderId,
+        final long correlationId,
+        final int venueId,
+        final long price
+    ) {
+        final UnsafeBuffer buffer = new UnsafeBuffer(new byte[256]);
+        new ParentOrderIntentEncoder()
+            .wrapAndApplyHeader(buffer, 0, new MessageHeaderEncoder())
+            .parentOrderId(parentOrderId)
+            .strategyId((short) Ids.STRATEGY_MARKET_MAKING)
+            .executionStrategyId(ExecutionStrategyIds.POST_ONLY_QUOTE)
+            .intentType(ParentIntentType.QUOTE)
+            .side(Side.BUY)
+            .instrumentId(INSTRUMENT)
+            .primaryVenueId(venueId)
+            .secondaryVenueId(0)
+            .quantityScaled(1L)
+            .priceMode(PriceMode.LIMIT)
+            .limitPriceScaled(price)
+            .referencePriceScaled(price)
+            .timeInForcePreference(TimeInForce.GTC)
+            .urgencyHint((byte) 1)
+            .postOnlyPreference(BooleanType.TRUE)
+            .selfTradePolicy((byte) 1)
+            .correlationId(correlationId)
+            .legCount((byte) 1)
+            .leg2Side(Side.NULL_VAL)
+            .leg2LimitPriceScaled(0L)
+            .parentTimeoutMicros(1_000L)
+            .venueSetId(0);
+        final ParentOrderIntentDecoder decoder = new ParentOrderIntentDecoder();
+        decoder.wrapAndApplyHeader(buffer, 0, new MessageHeaderDecoder());
+        return new ParentOrderIntentView().wrap(decoder);
+    }
+
+    private static FeeSchedule zeroFees() {
+        final FeeSchedule fees = new FeeSchedule();
+        fees.set(Ids.VENUE_COINBASE, 0L, 0L);
+        fees.set(Ids.VENUE_BINANCE, 0L, 0L);
+        return fees;
+    }
+
+    private static MarketDataEventDecoder marketData(
+        final int venueId,
+        final EntryType side,
+        final long price,
+        final long size) {
+        final UnsafeBuffer buffer = new UnsafeBuffer(new byte[128]);
+        new MarketDataEventEncoder()
+            .wrapAndApplyHeader(buffer, 0, new MessageHeaderEncoder())
+            .venueId(venueId)
+            .instrumentId(INSTRUMENT)
+            .entryType(side)
+            .updateAction(size == 0L ? UpdateAction.DELETE : UpdateAction.NEW)
+            .priceScaled(price)
+            .sizeScaled(size)
+            .priceLevel(0)
+            .ingressTimestampNanos(1L)
+            .exchangeTimestampNanos(1L)
+            .fixSeqNum(1);
+        final MarketDataEventDecoder decoder = new MarketDataEventDecoder();
+        decoder.wrapAndApplyHeader(buffer, 0, new MessageHeaderDecoder());
+        return decoder;
     }
 
     private static ExecutionEventDecoder exec(

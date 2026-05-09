@@ -9,7 +9,7 @@ import java.util.Objects;
  * <p>Responsibility: names the paths that must be treated as steady-state
  * trading hot paths versus cold/control paths. Role in system: task cards,
  * benchmarks, and code reviews use this type as the executable counterpart to
- * the V11 spec's allocation policy. Relationships: the policy is intentionally
+ * the active spec's allocation policy. Relationships: the policy is intentionally
  * independent of gateway/cluster implementation classes so common tests can
  * detect documentation drift without loading runtime modules. Each hot path
  * records the benchmark owner or the future task placeholder that must replace
@@ -58,6 +58,21 @@ public final class AllocationPolicy {
         IMMEDIATE_LIMIT_EXECUTION_CALLBACK("ImmediateLimitExecution callback", "ImmediateLimitExecutionBenchmark"),
         POST_ONLY_QUOTE_EXECUTION_CALLBACK("PostOnlyQuoteExecution callback", "PostOnlyQuoteExecutionBenchmark"),
         MULTI_LEG_CONTINGENT_EXECUTION_CALLBACK("MultiLegContingentExecution callback", "MultiLegContingentExecutionBenchmark"),
+        INVENTORY_HEDGE_MARKET_DATA_TICK("InventoryHedgeStrategy.onMarketDataTick", "InventoryHedgeStrategyBenchmark"),
+        INVENTORY_HEDGE_PORTFOLIO_UPDATE("InventoryHedgeStrategy.onPortfolioUpdate", "InventoryHedgeStrategyBenchmark"),
+        INVENTORY_HEDGE_PARENT_INTENT_EMISSION("InventoryHedgeStrategy parent-intent emission", "InventoryHedgeStrategyBenchmark"),
+        PARALLEL_VENUE_PARENT_INTENT("ParallelVenueExecution.onParentIntent", "ParallelVenueExecutionBenchmark"),
+        PARALLEL_VENUE_SLICE_PLAN("ParallelVenueExecution slice-plan computation", "ParallelVenueExecutionBenchmark"),
+        PARALLEL_VENUE_CHILD_EXECUTION("ParallelVenueExecution.onChildExecution", "ParallelVenueExecutionBenchmark"),
+        PARALLEL_VENUE_TIMER("ParallelVenueExecution.onTimer", "ParallelVenueExecutionBenchmark"),
+        SMART_ORDER_ROUTING_PARENT_INTENT("SmartOrderRoutingExecution.onParentIntent", "SmartOrderRoutingExecutionBenchmark"),
+        SMART_ORDER_ROUTING_SLICE_PLAN("SmartOrderRoutingExecution slice-plan computation", "SmartOrderRoutingExecutionBenchmark"),
+        SMART_ORDER_ROUTING_RESLICE("SmartOrderRoutingExecution.onMarketDataTick (re-slice path)", "SmartOrderRoutingExecutionBenchmark"),
+        SMART_ORDER_ROUTING_CHILD_EXECUTION("SmartOrderRoutingExecution.onChildExecution", "SmartOrderRoutingExecutionBenchmark"),
+        SMART_ORDER_ROUTING_TIMER("SmartOrderRoutingExecution.onTimer", "SmartOrderRoutingExecutionBenchmark"),
+        MIXED_PRECISION_OWN_ORDER_OVERLAY_QUERY("Mixed-precision OwnOrderOverlay query path for L2 venues", "OwnLiquidityBenchmark"),
+        BINANCE_L2_NORMALIZER_SBE_EVENT_PRODUCTION("BinanceL2MarketDataNormalizer SBE event production", "BinanceL2NormalizerBenchmark"),
+        BINANCE_ORDER_ENTRY_POLICY_ENRICHMENT("BinanceVenuePlugin order-entry policy enrichment", "BinanceOrderEntryPolicyBenchmark"),
         ORDER_COMMAND_ENCODING("order command encoding", "OrderEncodingBenchmark");
 
         private final String documentedName;

@@ -1,19 +1,22 @@
 # NitroJ Exchange — High-Frequency Liquidity and Arbitrage Infrastructure
 ## A Multi-Venue, Multi-Strategy Pluggable Prop-Stack
 
-**NitroJ Exchange** is a Java 21 low-latency trading platform, modular execution stack purpose-built for multi-venue market making and statistical arbitrage. It abstracts exchange-specific complexities into a unified, pluggable framework, allowing for sub-microsecond risk-checks and automated liquidity provision across fragmented markets. It provides venue connectivity, market-data normalization, order/risk state, and deterministic cluster-side strategy execution, with plugin-oriented extension points for adding new exchange/broker venues plus new trading and execution strategies.
+**NitroJ Exchange** is a Java 21 low-latency trading platform, modular execution stack purpose-built for multi-venue market making, statistical arbitrage, inventory hedging, and Smart Order Routing. It abstracts exchange-specific complexities into a unified, pluggable framework, allowing for sub-microsecond risk-checks and automated liquidity provision across fragmented markets. It provides venue connectivity, market-data normalization, portfolio/position state, a deterministic strategy engine, a pre-trade risk engine, an execution engine for parent-intent routing including Smart Order Routing, and an order manager for child-order lifecycle ownership, with plugin-oriented extension points for adding new exchange/broker venues plus new trading and execution strategies.
 
-The active development line is **V13.0**. V10.0 is preserved as the original frozen baseline, V11.0 is the frozen architecture baseline for multi-version FIX support, venue plugins, Coinbase FIX L3 support, L3-to-L2 derivation, consolidated L2 views, own-liquidity-aware arbitrage controls, and Coinbase simulator coverage, and V12.0 is the frozen low-latency hardening/evidence baseline for deterministic, zero-allocation steady-state hot paths. V13.0 supersedes V12.0 for the cluster strategy/execution layer only by adding a first-class execution strategy layer that separates trading intent from child-order execution.
+The active development line is **V14.0**. V10.0 is preserved as the original frozen baseline, V11.0 is the frozen architecture baseline for multi-version FIX support, venue plugins, Coinbase FIX L3 support, L3-to-L2 derivation, consolidated L2 views, own-liquidity-aware arbitrage controls, and Coinbase simulator coverage, V12.0 is the frozen low-latency hardening/evidence baseline for deterministic, zero-allocation steady-state hot paths, and V13.0 is the frozen execution strategy layer baseline. V14.0 supersedes V13.0 only for the venue, trading strategy, and execution strategy surfaces by adding Binance Spot, venue-indifferent hedge intents, and multi-venue routing execution plugins. The major V14 feature is **Smart Order Routing**: V14 takes the V13 parent-intent execution engine design to its natural next step, where a strategy declares hedge intent and the execution layer owns deterministic, fee-aware, multi-venue child-order routing.
 
 This repository is not a financial recommendation system. It is infrastructure code. Real venue connectivity must go through QA/UAT, credential review, exchange certification/onboarding, and production risk controls before live use.
 
 ## Current Status
 
 ```text
-Active spec:        NitroJEx_Master_Spec_V13.0.md
-Active plan:        nitrojex_implementation_plan_v4.0.0.md
-Migration doc:      NitroJEx_V12_to_V13_Migration.md
-Release evidence:   release-evidence/v13/README.md
+Active spec:        NitroJEx_Master_Spec_V14.0.md
+Active plan:        nitrojex_implementation_plan_v5.0.0.md
+Migration doc:      NitroJEx_V13_to_V14_Migration.md
+Release evidence:   release-evidence/v14/README.md
+Frozen V13 spec:    NitroJEx_Master_Spec_V13.0.md
+Frozen V13 plan:    nitrojex_implementation_plan_v4.0.0.md
+V12->V13 migration: NitroJEx_V12_to_V13_Migration.md
 Frozen V12 spec:    NitroJEx_Master_Spec_V12.0.md
 Frozen V12 plan:    nitrojex_implementation_plan_v3.0.0.md
 V11->V12 migration: NitroJEx_V11_to_V12_Migration.md
@@ -30,7 +33,109 @@ Use the standard automated check command:
 JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew check
 ```
 
-The project should still be treated as **pre-QA / pre-UAT** for real Coinbase connectivity.
+The project should still be treated as **pre-QA / pre-UAT** for real Coinbase and Binance connectivity.
+
+## V14 Binance, Hedger, and Multi-Venue Routing
+
+V14 is primarily a Smart Order Routing release. Binance is added as the second
+venue so the execution engine has a real multi-venue surface, and
+`InventoryHedgeStrategy` is added as the venue-indifferent parent-intent
+producer. The central product step is `SmartOrderRoutingExecution`: it leverages
+the V13 execution engine split between trading intent and child-order lifecycle,
+then extends that design into deterministic fee-aware routing, re-slicing, and
+parent/child state management across venues.
+
+V14 adds Binance Spot as the second production venue surface. The Binance venue
+entry uses venue ID `2`, `FIX_44`, venue plugin `BINANCE`, and native L2 market
+data. The previous sandbox example is no longer allowed to occupy ID `2` because
+V14 release evidence, replay, and persisted state reserve that numeric ID for
+Binance.
+
+Current Binance FIX verification, checked against the official Binance Spot FIX
+documentation during TASK-401:
+
+- FIX connections require TLS and SNI, with FIX 4.4 messages.
+- Order Entry endpoint: `tcp+tls://fix-oe.binance.com:9000`.
+- Drop Copy endpoint: `tcp+tls://fix-dc.binance.com:9000`.
+- Market Data endpoint: `tcp+tls://fix-md.binance.com:9000`.
+- API keys must have `FIX_API` for order entry; market data accepts `FIX_API` or
+  `FIX_API_READ_ONLY`.
+- FIX sessions only support Ed25519 keys.
+- Logon `<A>` signs `MsgType`, `SenderCompID`, `TargetCompID`, `MsgSeqNum`, and
+  `SendingTime`, joined by SOH, with the Ed25519 signature written to RawData
+  tag `96` and the API key written to Username tag `553`.
+- Logon requires `ResetSeqNumFlag(141)=Y`; Binance-specific message handling is
+  controlled by `MessageHandling(25035)`.
+- Supported self-trade prevention modes for V14 policy code are `STP_NONE`,
+  `EXPIRE_TAKER`, `EXPIRE_MAKER`, `EXPIRE_BOTH`, `DECREMENT`, and `TRANSFER`.
+
+Verification source: Binance Spot API FIX documentation,
+`https://github.com/binance/binance-spot-api-docs/blob/master/fix-api.md`.
+
+V14 does not add WebSocket transport, derivatives, new shared FIX protocol
+plugins, SBE schema changes, RiskEngine semantic changes, execution strategy
+composition, USD/USDT basis trading, or modifications to V13
+`MarketMakingStrategy`, `ArbStrategy`, `ImmediateLimitExecution`,
+`PostOnlyQuoteExecution`, or `MultiLegContingentExecution`.
+
+V14 introduces `InventoryHedgeStrategy` as the first producer of venue-set
+parent intents. Those parents are consumed by `ParallelVenueExecution` or
+`SmartOrderRoutingExecution`. Every child order still passes pre-trade risk, and
+all strategy/execution timers use deterministic cluster time.
+
+The V14 venue-indifferent dispatch path is:
+
+```text
+PortfolioEngine / market-data state
+  -> InventoryHedgeStrategy
+  -> ParentOrderIntent(intentType=HEDGE, venueSetId, executionStrategyId)
+  -> ExecutionStrategyEngine
+  -> ParallelVenueExecution or SmartOrderRoutingExecution
+  -> risk-checked child orders per venue
+```
+
+`InventoryHedgeStrategy` decides when net exposure has moved outside the
+configured safe band. It does not encode venue-specific order-working logic.
+`ParallelVenueExecution` splits hedge quantity across configured venues using
+available executable liquidity and does not re-slice after submission.
+`SmartOrderRoutingExecution` ranks executable liquidity by configured fee-adjusted
+price, can re-slice remaining quantity on deterministic market-data ticks, and
+enforces a minimum cluster-time interval between re-slice attempts.
+
+This is an intentional progression of the execution engine design, not a
+strategy-side shortcut. The trading strategy remains responsible for deciding
+that exposure should be hedged; the execution strategy remains responsible for
+how the parent is worked into risk-checked child orders. SOR is therefore the
+first V14 feature that fully demonstrates the V13 execution strategy layer as a
+multi-venue routing engine.
+
+Mixed precision is intentional. Coinbase `BTC-USD` remains modeled as an L3
+venue with exact own-order identity and derived L2, while Binance `BTCUSDT` is a
+native L2 venue with conservative own-liquidity subtraction at price level. The
+shared read surfaces (`ConsolidatedL2Book`, `ExternalLiquidityView`, and
+`OwnOrderOverlay`) hide that precision asymmetry from strategies. Coinbase
+`BTC-USD` and Binance `BTCUSDT` are distinct internal instruments; NitroJEx does
+not infer a USD/USDT basis conversion and does not automatically arbitrage them.
+
+V14 configuration is split across the normal config files:
+
+- `config/venues.toml`: Coinbase remains venue `1`; Binance Spot is venue `2`.
+- `config/instruments.toml`: Coinbase `BTC-USD` and Binance `BTCUSDT` use
+  separate internal instrument IDs.
+- `config/strategies.toml`: per-venue market making, explicit cross-venue arb,
+  and hedge strategy instances choose `ParallelVenue` or `SOR`.
+- `config/fees.toml`: the SOR fee table loaded at startup. Fee changes require a
+  restart and new replay/evidence; V14 does not poll REST for fee updates.
+- `config/risk.toml`: per-venue and aggregate limits. V14 keeps V13 `RiskEngine`
+  semantics and adds configuration surfaces for the new strategies.
+
+The mandatory gates before real Coinbase or Binance QA/UAT are
+`scripts/v12-preflight-check.sh`, `scripts/v13-preflight-check.sh`, and
+`scripts/v14-preflight-check.sh`. The V14 gate runs unit/integration checks,
+live-wire simulator E2E, JMH allocation evidence with `-prof gc`, and latency
+percentile reports for the V14 hot paths. Real venue QA/UAT remains blocked until
+the automated artifacts and the manual operational evidence listed by the
+preflight scripts are attached to the release record.
 
 NitroJEx targets **zero-allocation steady-state hot paths**, not literal zero allocation across the whole repository. Startup/config parsing, admin tooling, simulator code, diagnostics, REST polling, and tests may allocate. The trading hot path is the part that must be benchmarked toward `0 B/op`.
 
@@ -837,6 +942,127 @@ Actions:
   traffic.
 - Do not use real Coinbase QA/UAT to compensate for missing V13 local evidence.
 
+## V14 Operational Runbooks
+
+These runbooks cover the V14 second-venue, inventory hedge, parallel-venue, and
+SOR surfaces. They extend the V13 parent/execution runbooks above and do not
+replace FIX session, credential, risk, or venue outage procedures.
+
+### Hedge Stuck
+
+Signal: an `InventoryHedgeStrategy` active parent remains non-terminal beyond
+its configured execution SLA, or the strategy refuses to emit a new hedge because
+its active parent ID still points at a parent that should have ended.
+
+Actions:
+
+- Inspect the parent ID recorded by the strategy and confirm the matching
+  `ParentOrderState` exists in `ParentOrderRegistry`.
+- Check child links for the parent. For `ParallelVenueExecution`, all expected
+  venue children should be linked or deterministically rejected. For SOR, verify
+  the current slice generation and any cancel-before-resubmit sequence.
+- If no live child exists and the parent is still active, cancel the parent
+  through the execution engine and record the terminal reason.
+- If live children exist, cancel children first and wait for child terminal
+  callbacks before clearing strategy active-parent state.
+- Keep the affected hedge strategy paused until position, parent state, child
+  state, and outbound venue order evidence reconcile.
+
+### Hedge Cooldown Stuck
+
+Signal: a hedge parent terminal callback was observed, but
+`InventoryHedgeStrategy` remains in cooldown after deterministic cluster time has
+advanced past the configured cooldown or failure-extension interval.
+
+Actions:
+
+- Confirm cluster time, not wall-clock time, is the source used in the event log
+  and replay summary.
+- Verify the parent terminal reason. Failure reasons may extend cooldown; success
+  reasons should use the normal cooldown.
+- Snapshot the strategy state and compare active parent ID, cooldown-until time,
+  last threshold check, and last terminal reason with replay output.
+- Do not manually reset cooldown in live state unless the kill switch is active
+  and the operator has reconciled balances and parent/child state.
+- Treat replay divergence as a release blocker and roll back V14 strategy
+  activation for the affected instrument.
+
+### Parallel-Venue Partial Outage
+
+Signal: one venue in a hedge venue set is disconnected, stale, rejecting child
+orders, or missing market data while `ParallelVenueExecution` has active parents.
+
+Actions:
+
+- Confirm which venue is impaired and whether the other venue has fresh
+  executable liquidity.
+- Verify the slice plan used for the active parent. V14 `ParallelVenueExecution`
+  does not re-slice on market-data ticks; residual quantity is handled by the
+  parent completion timer.
+- Cancel live children on the impaired venue if the venue session reports them
+  working or pending cancel.
+- Let healthy-venue children complete normally, then inspect the parent terminal
+  reason: `DONE`, `LEG_TIMER_RESIDUAL_CANCELED`, `ALL_CHILDREN_REJECTED`, or
+  `CANCELED`.
+- Keep new hedge parents disabled for the impaired venue set until two-venue
+  reconciliation proves orders, balances, and parent state agree.
+
+### SOR Re-Slice Loop
+
+Signal: `SmartOrderRoutingExecution` attempts repeated re-slices faster than the
+configured minimum cluster-time interval, or cancel/resubmit churn continues
+without material plan improvement.
+
+Actions:
+
+- Compare each re-slice attempt timestamp against the configured minimum
+  interval. A violation implies a deterministic clock/counter bug.
+- Confirm every re-slice emits cancels before new submissions in cluster order.
+- Verify the new plan differs materially from the previous plan; SOR should not
+  churn on fee-equivalent or depth-equivalent ticks.
+- If any cancel fails or a new child cannot be submitted, expect the parent to
+  terminal with `RESLICE_FAILED` and no orphan working child.
+- Pause the SOR hedge strategy and switch hedge routing to `ParallelVenue` only
+  after replay evidence proves the fallback path for the same instrument.
+
+### Fee Schedule Misconfiguration
+
+Signal: SOR routes to an apparently worse venue, ranking flips after restart, or
+operators discover stale or incorrect maker/taker fee values in `config/fees.toml`.
+
+Actions:
+
+- Treat `config/fees.toml` as startup configuration. V14 does not update fees
+  from REST during normal operation.
+- Recompute fee-adjusted executable prices from the archived market-data tick,
+  side, quantity, and configured fee schedule.
+- If the table is wrong, pause SOR strategies, update the file through the
+  normal config-review path, restart the affected cluster/gateway deployment,
+  and rerun replay plus SOR slice-plan tests.
+- Do not claim fee-aware routing evidence from a run that used stale fees.
+- Keep USD/USDT identity separate; fee fixes must not introduce implicit basis
+  conversion between Coinbase `BTC-USD` and Binance `BTCUSDT`.
+
+### Rollback To V13
+
+Signal: V14 Binance, mixed-precision, hedge, SOR, parallel-venue, replay,
+benchmark, or two-venue reconciliation evidence fails after deployment rehearsal
+or during shadow operation.
+
+Actions:
+
+- Disable V14 strategies first: inventory hedge, SOR, parallel-venue hedge, and
+  any V14-only Binance activation.
+- Stop the Binance gateway process and mark venue ID `2` unavailable. Coinbase
+  V13 operation can continue only after open V14 children and parents reconcile.
+- Restore V13 strategy configuration: `MarketMaking -> PostOnlyQuote` and
+  `ArbStrategy -> MultiLegContingentExecution`.
+- Stop V14 cluster binaries only after snapshots, parent state, child state,
+  live venue orders, and balances are archived.
+- Restart the frozen V13 release and run `scripts/v13-preflight-check.sh`.
+- Real Binance QA/UAT remains blocked after rollback. Real Coinbase QA/UAT must
+  also remain blocked if V13 evidence is not current.
+
 ## Release Readiness
 
 V13 production connectivity claims require evidence, not intent. Real Coinbase
@@ -861,6 +1087,16 @@ Before production:
   exist before live trading.
 - Do not use real Coinbase QA/UAT to replace missing local evidence. QA/UAT is
   the final external venue validation step after local proof is complete.
+
+For V14, also run `config/v14-production-preflight.toml` review and
+`scripts/v14-preflight-check.sh`. Archive mixed-precision identity evidence,
+cross-venue arb evidence, Hedge x ParallelVenue and Hedge x SOR live-wire
+evidence, deterministic replay evidence including SOR re-slice, two-venue
+reconciliation evidence, and parent/execution JMH reports for every V14 hot path.
+After the full gate passes, run `scripts/archive-v14-release-evidence.sh` to
+copy local test XML, E2E XML, JMH reports, and reviewed config into
+`release-evidence/v14`. Coinbase and Binance QA/UAT both remain blocked until
+V12, V13, and V14 release evidence is complete.
 
 ## Future Strategy Catalog TODO
 

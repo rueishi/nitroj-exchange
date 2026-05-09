@@ -10,11 +10,11 @@ import org.agrona.MutableDirectBuffer;
 @SuppressWarnings("all")
 public final class ParentOrderIntentEncoder
 {
-    public static final int BLOCK_LENGTH = 83;
+    public static final int BLOCK_LENGTH = 87;
     public static final int TEMPLATE_ID = 40;
     public static final int SCHEMA_ID = 1;
-    public static final int SCHEMA_VERSION = 2;
-    public static final String SEMANTIC_VERSION = "5.2";
+    public static final int SCHEMA_VERSION = 3;
+    public static final String SEMANTIC_VERSION = "5.3";
     public static final java.nio.ByteOrder BYTE_ORDER = java.nio.ByteOrder.LITTLE_ENDIAN;
 
     private final ParentOrderIntentEncoder parentMessage = this;
@@ -1089,6 +1089,58 @@ public final class ParentOrderIntentEncoder
     public ParentOrderIntentEncoder parentTimeoutMicros(final long value)
     {
         buffer.putLong(offset + 75, value, BYTE_ORDER);
+        return this;
+    }
+
+
+    public static int venueSetIdId()
+    {
+        return 22;
+    }
+
+    public static int venueSetIdSinceVersion()
+    {
+        return 3;
+    }
+
+    public static int venueSetIdEncodingOffset()
+    {
+        return 83;
+    }
+
+    public static int venueSetIdEncodingLength()
+    {
+        return 4;
+    }
+
+    public static String venueSetIdMetaAttribute(final MetaAttribute metaAttribute)
+    {
+        if (MetaAttribute.PRESENCE == metaAttribute)
+        {
+            return "optional";
+        }
+
+        return "";
+    }
+
+    public static int venueSetIdNullValue()
+    {
+        return 0;
+    }
+
+    public static int venueSetIdMinValue()
+    {
+        return -2147483647;
+    }
+
+    public static int venueSetIdMaxValue()
+    {
+        return 2147483647;
+    }
+
+    public ParentOrderIntentEncoder venueSetId(final int value)
+    {
+        buffer.putInt(offset + 83, value, BYTE_ORDER);
         return this;
     }
 

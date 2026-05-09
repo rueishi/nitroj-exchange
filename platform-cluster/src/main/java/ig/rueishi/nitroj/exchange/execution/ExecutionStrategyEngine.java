@@ -15,11 +15,14 @@ import java.util.Objects;
  * Deterministic dispatcher for execution strategy plugins.
  *
  * <p>The engine validates the parent intent's execution strategy ID and
- * strategy/execution compatibility before dispatch. Child execution and cancel
- * dispatch use {@link ParentOrderRegistry} parent state to recover the owning
- * execution strategy. Timer dispatch uses a bounded primitive correlation-owner
- * table registered by execution strategies when they schedule timers through
- * the cluster-thread path.</p>
+ * strategy/execution compatibility before dispatch using the startup-populated
+ * primitive matrix. Clear operator-facing compatibility errors are produced by
+ * cold config validation; this hot-path engine only increments primitive reject
+ * counters and returns {@code false}. Child execution and cancel dispatch use
+ * {@link ParentOrderRegistry} parent state to recover the owning execution
+ * strategy. Timer dispatch uses a bounded primitive correlation-owner table
+ * registered by execution strategies when they schedule timers through the
+ * cluster-thread path.</p>
  */
 public final class ExecutionStrategyEngine {
     private final ExecutionStrategyRegistry registry;
@@ -122,6 +125,7 @@ public final class ExecutionStrategyEngine {
                 marketDataDispatches++;
             }
         }
+        emitUnreportedTerminalCallbacks();
     }
 
     public boolean registerTimerOwner(final long correlationId, final int executionStrategyId) {

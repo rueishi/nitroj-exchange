@@ -39,7 +39,8 @@ final class V13ParentSbeSchemaTest {
             .legCount((byte)2)
             .leg2Side(Side.SELL)
             .leg2LimitPriceScaled(6_510_000_000_000L)
-            .parentTimeoutMicros(123_456L);
+            .parentTimeoutMicros(123_456L)
+            .venueSetId(42);
 
         final ParentOrderIntentDecoder decoder = new ParentOrderIntentDecoder();
         decoder.wrapAndApplyHeader(buffer, 0, new MessageHeaderDecoder());
@@ -65,6 +66,44 @@ final class V13ParentSbeSchemaTest {
         assertThat(decoder.leg2Side()).isEqualTo(Side.SELL);
         assertThat(decoder.leg2LimitPriceScaled()).isEqualTo(6_510_000_000_000L);
         assertThat(decoder.parentTimeoutMicros()).isEqualTo(123_456L);
+        assertThat(decoder.venueSetId()).isEqualTo(42);
+    }
+
+    @Test
+    void parentOrderIntent_venueSetIdDefaultsToZeroForOlderBlockLength() {
+        final UnsafeBuffer buffer = new UnsafeBuffer(new byte[256]);
+        new ParentOrderIntentEncoder()
+            .wrapAndApplyHeader(buffer, 0, new MessageHeaderEncoder())
+            .parentOrderId(9001L)
+            .strategyId((short)7)
+            .executionStrategyId(11)
+            .intentType(ParentIntentType.IMMEDIATE_LIMIT)
+            .side(Side.BUY)
+            .instrumentId(101)
+            .primaryVenueId(1)
+            .secondaryVenueId(0)
+            .quantityScaled(50_000_000L)
+            .priceMode(PriceMode.LIMIT)
+            .limitPriceScaled(6_500_000_000_000L)
+            .referencePriceScaled(0L)
+            .timeInForcePreference(TimeInForce.IOC)
+            .urgencyHint((byte)3)
+            .postOnlyPreference(BooleanType.FALSE)
+            .selfTradePolicy((byte)4)
+            .correlationId(77L)
+            .legCount((byte)1)
+            .leg2Side(Side.SELL)
+            .leg2LimitPriceScaled(0L)
+            .parentTimeoutMicros(0L)
+            .venueSetId(99);
+
+        final ParentOrderIntentDecoder decoder = new ParentOrderIntentDecoder();
+        decoder.wrap(buffer, MessageHeaderEncoder.ENCODED_LENGTH,
+            ParentOrderIntentEncoder.BLOCK_LENGTH - ParentOrderIntentEncoder.venueSetIdEncodingLength(), 2);
+
+        assertThat(decoder.primaryVenueId()).isEqualTo(1);
+        assertThat(decoder.secondaryVenueId()).isZero();
+        assertThat(decoder.venueSetId()).isZero();
     }
 
     @Test

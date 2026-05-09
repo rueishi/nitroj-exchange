@@ -9,8 +9,8 @@ public final class RiskStateSnapshotEncoder
     public static final int BLOCK_LENGTH = 25;
     public static final int TEMPLATE_ID = 52;
     public static final int SCHEMA_ID = 1;
-    public static final int SCHEMA_VERSION = 2;
-    public static final String SEMANTIC_VERSION = "5.2";
+    public static final int SCHEMA_VERSION = 3;
+    public static final String SEMANTIC_VERSION = "5.3";
     public static final java.nio.ByteOrder BYTE_ORDER = java.nio.ByteOrder.LITTLE_ENDIAN;
 
     private final RiskStateSnapshotEncoder parentMessage = this;

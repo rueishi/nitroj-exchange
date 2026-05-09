@@ -57,6 +57,8 @@ public class Constants
 
     public static final int SENDING_TIME = 52;
 
+    public static final int SELF_TRADE_PREVENTION_MODE = 25001;
+
     public static final int TIME_IN_FORCE = 59;
 
     public static final int HANDL_INST = 21;
@@ -93,11 +95,15 @@ public class Constants
 
     public static final int PRICE = 44;
 
+    public static final int USERNAME = 553;
+
     public static final int CHECK_SUM = 10;
 
     public static final int SENDER_LOCATION_ID = 142;
 
     public static final int LAST_MSG_SEQ_NUM_PROCESSED = 369;
+
+    public static final int MESSAGE_HANDLING = 25035;
 
     public static final int RESET_SEQ_NUM_FLAG = 141;
 
@@ -109,7 +115,7 @@ public class Constants
 
     public static final int POSS_RESEND = 97;
 
-    public static final IntHashSet ALL_FIELDS = new IntHashSet(82);
+    public static final IntHashSet ALL_FIELDS = new IntHashSet(88);
     static
     {
         ALL_FIELDS.add(Constants.BEGIN_STRING);
@@ -127,6 +133,7 @@ public class Constants
         ALL_FIELDS.add(Constants.SIDE);
         ALL_FIELDS.add(Constants.SELF_TRADE_TYPE);
         ALL_FIELDS.add(Constants.SENDING_TIME);
+        ALL_FIELDS.add(Constants.SELF_TRADE_PREVENTION_MODE);
         ALL_FIELDS.add(Constants.TIME_IN_FORCE);
         ALL_FIELDS.add(Constants.HANDL_INST);
         ALL_FIELDS.add(Constants.BODY_LENGTH);
@@ -145,9 +152,11 @@ public class Constants
         ALL_FIELDS.add(Constants.SECURE_DATA);
         ALL_FIELDS.add(Constants.GAP_FILL_FLAG);
         ALL_FIELDS.add(Constants.PRICE);
+        ALL_FIELDS.add(Constants.USERNAME);
         ALL_FIELDS.add(Constants.CHECK_SUM);
         ALL_FIELDS.add(Constants.SENDER_LOCATION_ID);
         ALL_FIELDS.add(Constants.LAST_MSG_SEQ_NUM_PROCESSED);
+        ALL_FIELDS.add(Constants.MESSAGE_HANDLING);
         ALL_FIELDS.add(Constants.RESET_SEQ_NUM_FLAG);
         ALL_FIELDS.add(Constants.CANCEL_ORDERS_ON_DISCONNECT);
         ALL_FIELDS.add(Constants.HEART_BT_INT);

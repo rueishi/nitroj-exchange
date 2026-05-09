@@ -49,6 +49,16 @@ import org.agrona.concurrent.UnsafeBuffer;
  * activates the kill switch with {@code parent_reconciliation_failed}. A missing
  * parent/child registry link is counted and repaired deterministically when the
  * parent itself exists.</p>
+ *
+ * <p>V14 venue-indifferent hedge parents use the same recovery contract whether
+ * the active execution plugin is ParallelVenue or SOR: parent snapshots preserve
+ * the strategy/execution IDs and active child links, order-manager snapshots
+ * preserve venue-specific child state, and reconciliation counters expose
+ * repaired links, synthetic fills, partial recoveries, hedge-pending recoveries,
+ * and kill-switch activations. Recovery deliberately does not recompute routing
+ * plans or re-price residual hedge quantity; after snapshot/load the owning
+ * execution plugin resumes from its own bounded snapshot and the coordinator
+ * only reconciles venue truth against the recovered order and parent state.</p>
  */
 public final class RecoveryCoordinatorImpl implements RecoveryCoordinator {
     public enum RecoveryState {

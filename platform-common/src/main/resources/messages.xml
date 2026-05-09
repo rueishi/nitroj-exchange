@@ -10,8 +10,8 @@
 <sbe:messageSchema xmlns:sbe="http://fixprotocol.io/2016/sbe"
                    package="ig.rueishi.nitroj.exchange.messages"
                    id="1"
-                   version="2"
-                   semanticVersion="5.2"
+                   version="3"
+                   semanticVersion="5.3"
                    description="Trading Platform Internal Events"
                    byteOrder="littleEndian">
   <types>
@@ -43,6 +43,7 @@
     <type name="clusterMicros" primitiveType="int64" description="cluster.time() from Aeron Cluster. Microsecond resolution. Deterministic and identical across all 3 cluster nodes. Written by cluster-service thread only — never System.nanoTime()."/>
     <type name="bps" primitiveType="int64" description="Basis points * 1"/>
     <type name="venueId" primitiveType="int32" description="Registry-assigned venue int ID"/>
+    <type name="venueSetId" primitiveType="int32" presence="optional" nullValue="0" description="Registry-assigned venue-set int ID. 0 means no venue set and preserves V13 venue-aware intent semantics."/>
     <type name="instrumentId" primitiveType="int32" description="Registry-assigned instrument int ID"/>
     <type name="strategyId" primitiveType="int16" description="Strategy int constant"/>
     <type name="clOrdIdType" primitiveType="int64" description="cluster.logPosition()-based order ID"/>
@@ -122,6 +123,7 @@
       <validValue name="QUOTE">2</validValue>
       <validValue name="MULTI_LEG">3</validValue>
       <validValue name="CANCEL_PARENT">4</validValue>
+      <validValue name="HEDGE">5</validValue>
     </enum>
     <enum name="PriceMode" encodingType="int8">
       <validValue name="LIMIT">1</validValue>
@@ -242,6 +244,7 @@
     <field name="leg2Side" id="19" type="Side"/>
     <field name="leg2LimitPriceScaled" id="20" type="priceScaled"/>
     <field name="parentTimeoutMicros" id="21" type="clusterMicros"/>
+    <field name="venueSetId" id="22" type="venueSetId" sinceVersion="3"/>
   </sbe:message>
 
   <sbe:message name="ParentOrderUpdate" id="41" description="Deterministic non-terminal parent-order update">

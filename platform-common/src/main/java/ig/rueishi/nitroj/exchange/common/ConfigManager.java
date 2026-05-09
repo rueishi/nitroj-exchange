@@ -2,6 +2,7 @@ package ig.rueishi.nitroj.exchange.common;
 
 import com.electronwill.nightconfig.core.Config;
 import com.electronwill.nightconfig.toml.TomlParser;
+import ig.rueishi.nitroj.exchange.common.config.StrategyConfigValidator;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -410,11 +411,7 @@ public final class ConfigManager {
         final int executionStrategyId,
         final String fieldPath
     ) {
-        if (!ExecutionStrategyIds.isCompatible(tradingStrategyId, executionStrategyId)) {
-            throw new ConfigValidationException(fieldPath,
-                "execution strategy '" + ExecutionStrategyIds.nameOf(executionStrategyId)
-                    + "' is not compatible with trading strategy ID " + tradingStrategyId);
-        }
+        StrategyConfigValidator.validateCompatibility(tradingStrategyId, executionStrategyId, fieldPath);
     }
 
     private static FixConfig loadFix(final Config config) {

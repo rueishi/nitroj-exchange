@@ -1,6 +1,6 @@
-# NitroJEx V12/V13 Hot-Path Benchmark Evidence
+# NitroJEx V12/V13/V14 Hot-Path Benchmark Evidence
 
-This module owns the V12 and V13 JMH evidence harness. Production code cannot claim
+This module owns the V12, V13, and V14 JMH evidence harness. Production code cannot claim
 low latency, zero allocation, or zero GC for a declared hot path unless the
 current benchmark artifacts prove that path under the documented parameters.
 
@@ -16,6 +16,12 @@ Latency percentile evidence:
 
 ```bash
 JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew :platform-benchmarks:jmhLatencyReport
+```
+
+Focused evidence for one benchmark owner:
+
+```bash
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew :platform-benchmarks:jmh :platform-benchmarks:jmhLatencyReport -PjmhInclude=SmartOrderRoutingExecutionBenchmark
 ```
 
 Release evidence check:
@@ -40,7 +46,7 @@ platform-benchmarks/build/reports/jmh/jmh-latency-results.json
 
 ## Benchmark Parameters
 
-Default V12 evidence parameters:
+Default evidence parameters:
 
 ```text
 benchmark mode: SampleTime unless a benchmark class explicitly overrides it
@@ -62,7 +68,7 @@ Benchmarks must preallocate fixtures in `@Setup`. Any allocation reported by
 `-prof gc` in a measured steady-state hot path blocks a zero-allocation claim
 until it has an owner, reason, path classification, and remediation task.
 
-## V12/V13 Surface Map
+## V12/V13/V14 Surface Map
 
 Implemented benchmark owners:
 
@@ -90,6 +96,22 @@ ExecutionStrategyEngine dispatch -> ExecutionStrategyEngineBenchmark
 ImmediateLimitExecution callback -> ImmediateLimitExecutionBenchmark
 PostOnlyQuoteExecution callback -> PostOnlyQuoteExecutionBenchmark
 MultiLegContingentExecution callback -> MultiLegContingentExecutionBenchmark
+InventoryHedgeStrategy.onMarketDataTick -> InventoryHedgeStrategyBenchmark
+InventoryHedgeStrategy.onPortfolioUpdate -> InventoryHedgeStrategyBenchmark
+InventoryHedgeStrategy parent-intent emission -> InventoryHedgeStrategyBenchmark
+ParallelVenueExecution.onParentIntent -> ParallelVenueExecutionBenchmark
+ParallelVenueExecution slice-plan computation -> ParallelVenueExecutionBenchmark
+ParallelVenueExecution.onChildExecution -> ParallelVenueExecutionBenchmark
+ParallelVenueExecution.onTimer -> ParallelVenueExecutionBenchmark
+SmartOrderRoutingExecution slice-plan/dispatch/re-slice -> SmartOrderRoutingExecutionBenchmark
+SmartOrderRoutingExecution.onParentIntent -> SmartOrderRoutingExecutionBenchmark
+SmartOrderRoutingExecution slice-plan computation -> SmartOrderRoutingExecutionBenchmark
+SmartOrderRoutingExecution.onMarketDataTick (re-slice path) -> SmartOrderRoutingExecutionBenchmark
+SmartOrderRoutingExecution.onChildExecution -> SmartOrderRoutingExecutionBenchmark
+SmartOrderRoutingExecution.onTimer -> SmartOrderRoutingExecutionBenchmark
+Mixed-precision OwnOrderOverlay query path for L2 venues -> OwnLiquidityBenchmark
+BinanceL2MarketDataNormalizer SBE event production -> BinanceL2NormalizerBenchmark
+BinanceVenuePlugin order-entry policy enrichment -> BinanceOrderEntryPolicyBenchmark
 order command encoding -> OrderEncodingBenchmark
 ```
 
@@ -97,6 +119,21 @@ V13 execution evidence is interpreted the same way as V12 evidence: allocation
 runs use `-prof gc` and latency runs use nanosecond sample-time percentiles.
 The parent registry, execution engine, and three built-in execution strategies
 are mandatory release-gate surfaces before any V13 low-latency or zero-GC claim.
+For V14, `InventoryHedgeStrategyBenchmark`, `ParallelVenueExecutionBenchmark`,
+`SmartOrderRoutingExecutionBenchmark`, `OwnLiquidityBenchmark`,
+`BinanceL2NormalizerBenchmark`, and `BinanceOrderEntryPolicyBenchmark` own the
+new spec §11.2 surfaces. The SOR owner includes parent-intent dispatch,
+fee-aware slice-plan computation, and the market-data-driven re-slice path. The
+same allocation and latency report tasks produce the release evidence, and the
+V14 preflight script keeps the V12 and V13 gates active before adding V14
+evidence checks.
+
+V14 non-goals for this module: benchmarks do not establish live venue
+connectivity, Binance credential safety, two-venue operational reconciliation,
+or simulator correctness. Those are proven by the V14 live-wire, QA/UAT, and
+runbook gates. Benchmark fixtures preallocate deterministic state and measure
+steady-state hot paths only; construction, config parsing, credential loading,
+and diagnostics remain cold-path surfaces.
 
 Traceability placeholders for future implementation tasks:
 
@@ -131,6 +168,7 @@ Before QA/UAT or any public low-latency claim:
 ```text
 run :platform-benchmarks:jmh
 run :platform-benchmarks:jmhLatencyReport
+run scripts/v14-preflight-check.sh before V14 release signoff
 run :platform-common:test for ArchUnit/static guardrails
 archive both JMH JSON reports
 record every non-zero B/op result with owner, reason, classification, remediation task, and exact rerun command
