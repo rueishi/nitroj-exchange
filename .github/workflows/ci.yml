@@ -24,8 +24,8 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Ensure Gradle wrapper is executable
-        run: chmod +x gradlew
+      - name: Ensure executable scripts keep mode
+        run: chmod +x gradlew scripts/*.sh
 
       - name: Validate build
         run: ./gradlew check
@@ -44,8 +44,8 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Ensure Gradle wrapper is executable
-        run: chmod +x gradlew
+      - name: Ensure executable scripts keep mode
+        run: chmod +x gradlew scripts/*.sh
 
       - name: Run e2e test task
         run: ./gradlew e2eTest
