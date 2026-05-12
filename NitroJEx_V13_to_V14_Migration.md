@@ -41,6 +41,15 @@ V14 also activates capabilities that exist in V13 but had no second venue to ope
 
 V14 makes no changes to V13 SBE schema, V13 trading-strategy behavior, V13 RiskEngine semantics, V13 deterministic replay principles, V13 base snapshot/load mechanics, or V13 hot-path allocation policy. V14 tightens the execution-strategy restart contract: execution-strategy engine state, execution-strategy plugin state, timer-owner state, and relevant execution-strategy stats must be present in Aeron Cluster snapshot/load and validated through replay/restart/rebuild.
 
+Relevant execution-strategy stats are cluster state when they can affect
+operator diagnosis, parent recovery, or future SOR policy/model inputs. They are
+not disposable wall-clock telemetry. V14 SOR still routes from deterministic
+fees, executable liquidity, side, quantity, and cluster-time re-slice rules, but
+it must preserve observational venue stats such as child submissions, risk
+rejects, execution-report counts, filled quantity, ack/fill latency windows, and
+last submit/report cluster time so restart/rebuild begins from the same
+policy-input state.
+
 ---
 
 # 2. Compatibility Surface
@@ -322,6 +331,9 @@ Before V14 deployment to a UAT or production-shadow environment:
       approved secret source.
     Run V14 unit, integration, simulator, and live-wire E2E.
     Run V14 deterministic replay including mixed-precision scenarios.
+    Run execution-strategy snapshot/load and restart/rebuild checks for
+      engine state, plugin state, timer-owner state, active parent/child
+      mappings, terminal reasons, venue stats, and SOR future-policy inputs.
     Run V14 JMH allocation and latency reports.
     Archive V14 evidence bundle per spec §14.
     Confirm USD/USDT instrument identity decision is reflected in operational
@@ -379,6 +391,39 @@ V14 must not use real-venue QA/UAT to compensate for missing local evidence.
 
 ---
 
+## 4.4 Snapshot, Replay, Restart, and Rebuild Contract
+
+V14 keeps the V13 snapshot/load mechanics but expands the required contents for
+the execution-strategy layer. A valid V14 snapshot/restart path must restore:
+
+    ExecutionStrategyEngine dispatch state and deterministic timer ownership.
+    Execution plugin state for ImmediateLimitExecution, PostOnlyQuoteExecution,
+      MultiLegContingentExecution, ParallelVenueExecution, and
+      SmartOrderRoutingExecution.
+    Parent registry state, active parent/child links, fill aggregation, terminal
+      reasons, and cancel/reject/recovery state.
+    Relevant per-strategy and per-venue stats that are derived from ordered
+      cluster events and useful for recovery, diagnosis, or future policy.
+    SOR future-policy/model inputs: per-venue child submissions, risk rejects,
+      ack/fill/reject/cancel/expire report counts, filled quantity, ack/fill
+      latency windows, and last submit/report cluster time.
+
+Latency windows matter for SOR because they can become routing policy inputs in
+later releases. V14 does not use those windows to rank venues, so preserving
+them must not change current V14 routing decisions. The acceptance requirement
+is stronger: after snapshot/load, deterministic replay, restart, or rebuild, the
+stats and policy-input state must match the original ordered event stream while
+the V14 SOR route choice remains governed only by configured fees, executable
+liquidity, side, quantity, and cluster-time re-slice eligibility.
+
+TASK-418 and TASK-419 evidence must cover this contract. If a stat is derived
+only from non-deterministic wall-clock observation and cannot affect recovery,
+diagnosis, or future policy, it may remain telemetry. If it is derived from
+cluster-ordered events and could be used by future SOR modelling or policy, it
+must be included in snapshot/load and replay/restart/rebuild validation.
+
+---
+
 # 5. Behavior Changes Operations Should Know
 
 ## 5.1 What Looks Different in V14
@@ -400,6 +445,9 @@ activated:
     OwnOrderOverlay returns precise numbers for Coinbase positions and
       conservative numbers for Binance positions.
     Reconciliation surface covers two venues.
+    Execution-strategy snapshot/restart evidence now includes strategy-owned
+      venue stats and SOR future-policy inputs, even though those inputs do not
+      alter V14 SOR route ranking.
     Per-venue and aggregate risk limits replace the implicit
       single-venue-equals-aggregate model.
 
@@ -475,7 +523,8 @@ V14 is not a migration of:
     V13 trading strategies or execution strategies.
     RiskEngine semantics.
     Deterministic replay rules from V12 and V13.
-    Snapshot/load file format.
+    Base snapshot/load mechanics or V13 parent snapshot format; V14 only
+      expands the execution-strategy contents that must be captured.
     Hot-path allocation policy.
 
 These are baseline-frozen and must not change as part of V14 work. Any V14 task
@@ -515,6 +564,9 @@ releases remains required. The V14 gate must be archived with:
     Cross-venue arb evidence.
     Hedge × ParallelVenue and Hedge × SOR live-wire evidence.
     Deterministic replay evidence for mixed precision and SOR re-slice.
+    Execution-strategy snapshot/load and restart/rebuild evidence covering
+      engine/plugin state, timer-owner state, venue stats, and SOR
+      future-policy inputs.
     Two-venue reconciliation evidence.
 
 Real Coinbase and Binance QA/UAT remain blocked until the V12, V13, and V14
