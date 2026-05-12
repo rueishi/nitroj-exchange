@@ -102,6 +102,18 @@ available executable liquidity and does not re-slice after submission.
 price, can re-slice remaining quantity on deterministic market-data ticks, and
 enforces a minimum cluster-time interval between re-slice attempts.
 
+V14 restart correctness includes execution-strategy state and execution-strategy
+stats. Aeron Cluster snapshots and replay/restart/rebuild evidence must include
+the `ExecutionStrategyEngine` dispatch/timer state, each active execution plugin
+state, timer-owner state, active parent/child relationships, terminal reasons,
+and relevant venue stats. For SOR this includes future policy/model inputs such
+as per-venue child submissions, risk rejects, report counts, filled quantity,
+ack/fill latency windows, and last submit/report cluster time. These SOR stats
+are observational in V14: they are snapshotted so future SOR modelling and policy
+work can start from deterministic state after restart, but V14 routing decisions
+still use configured fees, executable liquidity, side, quantity, and deterministic
+cluster-time re-slice rules.
+
 This is an intentional progression of the execution engine design, not a
 strategy-side shortcut. The trading strategy remains responsible for deciding
 that exposure should be hedged; the execution strategy remains responsible for
@@ -1025,6 +1037,26 @@ Actions:
 - Pause the SOR hedge strategy and switch hedge routing to `ParallelVenue` only
   after replay evidence proves the fallback path for the same instrument.
 
+### Execution Snapshot Divergence
+
+Signal: after Aeron Cluster snapshot/load, replay, restart, or rebuild, an
+execution parent has different child attribution, timer ownership, terminal
+state, venue stats, or SOR future-policy counters than the original run.
+
+Actions:
+
+- Treat the divergence as a V14 release blocker. Execution strategy state is
+  deterministic cluster state, not disposable real-time telemetry.
+- Compare the parent registry, execution plugin snapshots, timer-owner state,
+  active children, terminal reasons, and per-venue execution stats against the
+  archived replay evidence.
+- For SOR, verify future-policy inputs separately from routing outputs:
+  child-submission counts, risk-reject counts, execution-report counts, filled
+  quantity, ack/fill latency windows, and last submit/report cluster time must
+  survive restart without changing V14 fee-aware routing behavior.
+- Keep affected V14 strategies paused until snapshot/load and replay evidence
+  agree for the same ordered event stream.
+
 ### Fee Schedule Misconfiguration
 
 Signal: SOR routes to an apparently worse venue, ranking flips after restart, or
@@ -1091,8 +1123,10 @@ Before production:
 For V14, also run `config/v14-production-preflight.toml` review and
 `scripts/v14-preflight-check.sh`. Archive mixed-precision identity evidence,
 cross-venue arb evidence, Hedge x ParallelVenue and Hedge x SOR live-wire
-evidence, deterministic replay evidence including SOR re-slice, two-venue
-reconciliation evidence, and parent/execution JMH reports for every V14 hot path.
+evidence, deterministic replay evidence including SOR re-slice, execution
+strategy snapshot/load evidence including venue stats and SOR future-policy
+inputs, two-venue reconciliation evidence, and parent/execution JMH reports for
+every V14 hot path.
 After the full gate passes, run `scripts/archive-v14-release-evidence.sh` to
 copy local test XML, E2E XML, JMH reports, and reviewed config into
 `release-evidence/v14`. Coinbase and Binance QA/UAT both remain blocked until
