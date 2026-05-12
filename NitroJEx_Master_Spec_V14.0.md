@@ -27,7 +27,7 @@ Active Development - Supersedes V13.0 for the venue, trading strategy, and execu
 - Introduces `SmartOrderRoutingExecution` as the second venue-indifferent execution strategy: depth + fee + own-liquidity-netted scoring with re-slicing on market-data tick.
 - Activates the venue-indifferent dispatch path end-to-end for the first time. V14 adds the missing `venueSetId` field to `ParentOrderIntent`; V14 is the first release where a producer populates it and a consumer routes on it.
 - Exercises mixed-precision asymmetric venues (Coinbase L3 + Binance L2) through `OwnOrderOverlay`, `ExternalLiquidityView`, and `ConsolidatedL2Book` with task-owned tests.
-- Preserves V13 deterministic replay, hot-path allocation policy, parent registry semantics, snapshot/load behavior, and risk gating. V13 external behavior of `MarketMakingStrategy`, `ArbStrategy`, `MultiLegContingentExecution`, `PostOnlyQuoteExecution`, and `ImmediateLimitExecution` is unchanged.
+- Preserves V13 deterministic replay, hot-path allocation policy, parent registry semantics, base snapshot/load mechanics, and risk gating. V14 makes execution-strategy engine state, execution-strategy plugin state, and relevant execution-strategy stats explicit members of the Aeron Cluster snapshot/replay/restart contract. V13 external behavior of `MarketMakingStrategy`, `ArbStrategy`, `MultiLegContingentExecution`, `PostOnlyQuoteExecution`, and `ImmediateLimitExecution` is unchanged.
 
 ---
 
@@ -72,7 +72,7 @@ V14 also activates capabilities that already exist in V13 but had no second venu
     Parallel multi-venue market making via independent MarketMakingStrategy instances.
     Mixed-precision OwnOrderOverlay, ExternalLiquidityView, and ConsolidatedL2Book.
 
-V14 does not modify V13 execution strategies, V13 trading strategies, V13 SBE schema, V13 risk semantics, V13 deterministic replay rules, V13 snapshot/load mechanics, or V13 hot-path allocation policy.
+V14 does not modify V13 trading-strategy behavior, V13 SBE schema, V13 risk semantics, V13 deterministic replay principles, V13 base snapshot/load mechanics, or V13 hot-path allocation policy. V14 does tighten the snapshot/restart contract for execution strategies: all execution-strategy state and stats that affect replay equivalence, recovery, audit, timers, parent/child routing, or future execution behavior must be included in Aeron Cluster snapshot/load and validated across replay/restart/rebuild.
 
 ## 1.3 Task Numbering
 
@@ -448,7 +448,7 @@ Same as `ParallelVenueExecution` plus:
 
 `SmartOrderRoutingExecution` reads only from cluster-deterministic state. The fee schedule is loaded at startup from configuration; it does not update from REST endpoints during normal operation. Re-slicing decisions are bounded: a minimum cluster-time interval between re-slice attempts must be enforced to prevent thrash. The minimum interval is a configuration value.
 
-`SmartOrderRoutingExecution` does not implement venue latency weighting, fill-quality feedback, or fill-probability modeling. Those are catalog items for future execution strategies.
+`SmartOrderRoutingExecution` does not use venue latency weighting, fill-quality feedback, or fill-probability modeling for V14 routing decisions. V14 does, however, record bounded per-venue future-policy inputs from ordered cluster events so a later SOR model can be introduced without losing restart continuity. These recorded inputs include child submissions, risk rejects, acknowledgement reports, fill reports, reject reports, cancel/expire reports, filled quantity, submit-to-ack latency totals/maxima, submit-to-fill latency totals/maxima, and last submit/report cluster times. These stats must remain observational in V14 and must not alter the executable-price-after-fees ranking.
 
 ## 6.3 Default Compatibility Matrix
 
@@ -686,6 +686,64 @@ Replay tests must prove that the same ordered SBE stream plus the same initial s
     Snapshot/load round trips with active hedge parents and active
       ParallelVenue or SOR parents.
 
+## 10.4 Snapshot, Restart, and Rebuild Contract
+
+V14 restart correctness is defined as:
+
+    latest Aeron Cluster snapshot
+      + ordered cluster log replay after that snapshot
+      + venue/order/position reconciliation
+      + rebuild of explicitly ephemeral telemetry
+
+The Aeron Cluster snapshot must include every execution-strategy datum that can affect future deterministic behavior, replay equivalence, audit, recovery, timer dispatch, parent/child routing, or operator-visible execution counters. This includes:
+
+    ExecutionStrategyEngine counters:
+      parent-intent dispatches, child-execution dispatches, timer dispatches,
+      cancel dispatches, market-data dispatches, unknown execution-strategy
+      rejects, incompatible strategy rejects, missing-parent rejects,
+      timer-capacity rejects, and unknown-timer rejects.
+    ExecutionStrategyEngine timer-owner state:
+      active timer correlation IDs and owning execution-strategy IDs.
+    ParentOrderRegistry state:
+      active parent slots, requested/filled/remaining quantity, average fill
+      price, status, terminal reason, terminal-reported state, last transition
+      cluster time, primary timer correlation ID, active child links, and
+      registry capacity/reject counters.
+    Execution strategy plugin state:
+      active parent slots, active child counts or child IDs, cancel-pending
+      flags, retry counts, re-slice generations, filled/rejected quantities,
+      timer correlation IDs, routing/slice state, last re-slice cluster time,
+      and parent terminal bookkeeping.
+    Execution strategy plugin stats:
+      relevant counters such as parent intents, child submissions, risk rejects,
+      capacity rejects, malformed rejects, retry submissions, retry exhaustions,
+      timer schedules/firings, residual cancels, all-children-rejected,
+      reslice attempts/successes/failures, reslice interval skips, parent
+      cancels, child-fill-during-cancel, missing callback drops, and bounded
+      future-policy inputs that may affect later SOR models.
+    Future SOR policy inputs:
+      per-venue child submissions, risk rejects, acknowledgement reports, fill
+      reports, reject reports, cancel/expire reports, filled quantity,
+      submit-to-ack latency totals/maxima, submit-to-fill latency totals/maxima,
+      and last submit/report cluster times. V14 records and snapshots these
+      fields but does not use them for routing decisions.
+
+Only explicitly ephemeral state may be omitted from the cluster snapshot:
+
+    transient scratch buffers and reusable SBE encoders/decoders
+    live heartbeat windows
+    rolling telemetry that does not affect decisions, audit, future SOR policy,
+      or replay evidence
+    derived market-data observations that are rebuilt from current books or
+      restarted cold before strategies are enabled
+
+Startup must load snapshots before strategy activation, replay the ordered log
+after the snapshot, reconcile venue truth for open orders/fills/positions, and
+rebuild omitted telemetry before execution strategies are allowed to emit new
+child orders. Tests must prove that an active execution strategy restored from
+snapshot plus replay reaches the same parent state, child command sequence,
+timer-owner table, plugin counters, and engine counters as uninterrupted replay.
+
 ---
 
 # 11. Hot-Path Policy
@@ -749,10 +807,13 @@ Every V14 task card must add automated coverage for, where applicable:
       with active hedge parent.
     ParallelVenueExecution: slice planning, parallel child submission, full
       fill, partial fill, timer-driven residual cancel, all-children-rejected,
-      parent cancel mid-flight, capacity full, replay, snapshot/load.
+      parent cancel mid-flight, capacity full, replay, snapshot/load including
+      plugin state, timer-owner state, and relevant execution stats.
     SmartOrderRoutingExecution: slice planning with fee scoring, re-slice on
       tick, re-slice cancel-and-resubmit ordering, re-slice failure, fee
-      schedule edge cases, capacity full, replay, snapshot/load.
+      schedule edge cases, capacity full, replay, snapshot/load including
+      plugin state, timer-owner state, reslice state, and relevant execution
+      stats.
     Binance Ed25519 logon, heartbeat, sequence reset, and disconnect/reconnect.
     Binance L2 normalizer: snapshot, incremental refresh, snapshot replay,
       malformed message safe-drop, message sequence gap recovery.

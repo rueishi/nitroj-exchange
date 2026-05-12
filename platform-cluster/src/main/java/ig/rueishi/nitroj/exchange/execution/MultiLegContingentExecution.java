@@ -220,6 +220,76 @@ public final class MultiLegContingentExecution implements ExecutionStrategy {
     public long timerScheduleRejects() { return timerScheduleRejects; }
     public long timerCorrelationId() { return timerCorrelationId; }
 
+    public Snapshot newSnapshot() {
+        return new Snapshot();
+    }
+
+    public void snapshotInto(final Snapshot snapshot) {
+        snapshot.parentOrderId = parentOrderId;
+        snapshot.strategyId = strategyId;
+        snapshot.instrumentId = instrumentId;
+        snapshot.leg1ClOrdId = leg1ClOrdId;
+        snapshot.leg2ClOrdId = leg2ClOrdId;
+        snapshot.hedgeClOrdId = hedgeClOrdId;
+        snapshot.leg1VenueId = leg1VenueId;
+        snapshot.leg2VenueId = leg2VenueId;
+        snapshot.leg1Side = leg1Side;
+        snapshot.leg2Side = leg2Side;
+        snapshot.leg1PriceScaled = leg1PriceScaled;
+        snapshot.leg2PriceScaled = leg2PriceScaled;
+        snapshot.qtyScaled = qtyScaled;
+        snapshot.leg1FillQtyScaled = leg1FillQtyScaled;
+        snapshot.leg2FillQtyScaled = leg2FillQtyScaled;
+        snapshot.leg1Status = leg1Status;
+        snapshot.leg2Status = leg2Status;
+        snapshot.parentCancelPending = parentCancelPending;
+        snapshot.timerCorrelationId = timerCorrelationId;
+        snapshot.parentIntents = parentIntents;
+        snapshot.bothLegsFilled = bothLegsFilled;
+        snapshot.legRejects = legRejects;
+        snapshot.imbalanceHedges = imbalanceHedges;
+        snapshot.hedgeRiskRejects = hedgeRiskRejects;
+        snapshot.hedgeVenueRejects = hedgeVenueRejects;
+        snapshot.timerFirings = timerFirings;
+        snapshot.parentCancels = parentCancels;
+        snapshot.childFillDuringCancel = childFillDuringCancel;
+        snapshot.capacityRejects = capacityRejects;
+        snapshot.timerScheduleRejects = timerScheduleRejects;
+    }
+
+    public void loadFrom(final Snapshot snapshot) {
+        parentOrderId = snapshot.parentOrderId;
+        strategyId = snapshot.strategyId;
+        instrumentId = snapshot.instrumentId;
+        leg1ClOrdId = snapshot.leg1ClOrdId;
+        leg2ClOrdId = snapshot.leg2ClOrdId;
+        hedgeClOrdId = snapshot.hedgeClOrdId;
+        leg1VenueId = snapshot.leg1VenueId;
+        leg2VenueId = snapshot.leg2VenueId;
+        leg1Side = snapshot.leg1Side;
+        leg2Side = snapshot.leg2Side;
+        leg1PriceScaled = snapshot.leg1PriceScaled;
+        leg2PriceScaled = snapshot.leg2PriceScaled;
+        qtyScaled = snapshot.qtyScaled;
+        leg1FillQtyScaled = snapshot.leg1FillQtyScaled;
+        leg2FillQtyScaled = snapshot.leg2FillQtyScaled;
+        leg1Status = snapshot.leg1Status;
+        leg2Status = snapshot.leg2Status;
+        parentCancelPending = snapshot.parentCancelPending;
+        timerCorrelationId = snapshot.timerCorrelationId;
+        parentIntents = snapshot.parentIntents;
+        bothLegsFilled = snapshot.bothLegsFilled;
+        legRejects = snapshot.legRejects;
+        imbalanceHedges = snapshot.imbalanceHedges;
+        hedgeRiskRejects = snapshot.hedgeRiskRejects;
+        hedgeVenueRejects = snapshot.hedgeVenueRejects;
+        timerFirings = snapshot.timerFirings;
+        parentCancels = snapshot.parentCancels;
+        childFillDuringCancel = snapshot.childFillDuringCancel;
+        capacityRejects = snapshot.capacityRejects;
+        timerScheduleRejects = snapshot.timerScheduleRejects;
+    }
+
     private void onLegFill(final ChildExecutionView execution) {
         if (parentCancelPending) {
             childFillDuringCancel++;
@@ -372,5 +442,54 @@ public final class MultiLegContingentExecution implements ExecutionStrategy {
         if (ctx == null) {
             throw new IllegalStateException("MultiLegContingentExecution is not initialized");
         }
+    }
+
+    public static final class Snapshot {
+        private long parentOrderId;
+        private int strategyId;
+        private int instrumentId;
+        private long leg1ClOrdId;
+        private long leg2ClOrdId;
+        private long hedgeClOrdId;
+        private int leg1VenueId;
+        private int leg2VenueId;
+        private byte leg1Side;
+        private byte leg2Side;
+        private long leg1PriceScaled;
+        private long leg2PriceScaled;
+        private long qtyScaled;
+        private long leg1FillQtyScaled;
+        private long leg2FillQtyScaled;
+        private byte leg1Status;
+        private byte leg2Status;
+        private boolean parentCancelPending;
+        private long timerCorrelationId;
+        private long parentIntents;
+        private long bothLegsFilled;
+        private long legRejects;
+        private long imbalanceHedges;
+        private long hedgeRiskRejects;
+        private long hedgeVenueRejects;
+        private long timerFirings;
+        private long parentCancels;
+        private long childFillDuringCancel;
+        private long capacityRejects;
+        private long timerScheduleRejects;
+
+        public long parentOrderId() { return parentOrderId; }
+        public long timerCorrelationId() { return timerCorrelationId; }
+        public long leg1FillQtyScaled() { return leg1FillQtyScaled; }
+        public long leg2FillQtyScaled() { return leg2FillQtyScaled; }
+        public long parentIntents() { return parentIntents; }
+        public long bothLegsFilled() { return bothLegsFilled; }
+        public long legRejects() { return legRejects; }
+        public long imbalanceHedges() { return imbalanceHedges; }
+        public long hedgeRiskRejects() { return hedgeRiskRejects; }
+        public long hedgeVenueRejects() { return hedgeVenueRejects; }
+        public long timerFirings() { return timerFirings; }
+        public long parentCancels() { return parentCancels; }
+        public long childFillDuringCancel() { return childFillDuringCancel; }
+        public long capacityRejects() { return capacityRejects; }
+        public long timerScheduleRejects() { return timerScheduleRejects; }
     }
 }

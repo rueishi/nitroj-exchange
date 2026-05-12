@@ -244,6 +244,9 @@ public final class RecoveryCoordinatorImpl implements RecoveryCoordinator {
         if (snapshotImage == null) {
             return;
         }
+        while (snapshotImage.poll((buffer, offset, length, header) -> loadSnapshot(buffer, offset), 1) == 0) {
+            Thread.onSpinWait();
+        }
     }
 
     @Override

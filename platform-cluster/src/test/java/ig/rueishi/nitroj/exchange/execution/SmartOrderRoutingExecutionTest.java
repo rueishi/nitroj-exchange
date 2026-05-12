@@ -204,6 +204,11 @@ final class SmartOrderRoutingExecutionTest {
         restored.loadFrom(snapshot);
         assertThat(snapshot.activeParentId(0)).isEqualTo(24L);
         assertThat(snapshot.activeLastResliceMicros(0)).isEqualTo(2_000L);
+        assertThat(snapshot.activeGeneration(0)).isEqualTo(1);
+        assertThat(restored.parentIntents()).isEqualTo(1L);
+        assertThat(restored.childSubmissions()).isEqualTo(2L);
+        assertThat(restored.resliceAttempts()).isEqualTo(1L);
+        assertThat(restored.resliceSuccesses()).isEqualTo(1L);
     }
 
     @Test
@@ -247,6 +252,31 @@ final class SmartOrderRoutingExecutionTest {
         assertThat(harness.orders.getOrder(41_001L).status()).isEqualTo(OrderStatus.PENDING_CANCEL);
         assertThat(harness.parents.lookup(41L).status()).isEqualTo(ParentOrderState.DONE);
         assertThat(harness.parents.activeChildCount(41L)).isZero();
+    }
+
+    @Test
+    void snapshotLoadPreservesFutureVenuePolicyStatsWithoutChangingSorRouting() {
+        final Harness harness = new Harness(1L, 1_000L, 8, 8, false, zeroFees());
+        harness.seedAsk(Ids.VENUE_COINBASE, PRICE, QTY);
+        harness.strategy.onParentIntent(intent(42L, QTY, PRICE, 1_000L));
+        harness.time = 1_100L;
+        harness.strategy.onChildExecution(new ChildExecutionView().wrap(exec(42_001L, ExecType.NEW, 0L, QTY, false), 42L));
+        harness.time = 1_600L;
+        harness.strategy.onChildExecution(new ChildExecutionView().wrap(exec(42_001L, ExecType.PARTIAL_FILL, 25L, 75L, false), 42L));
+
+        final SmartOrderRoutingExecution.Snapshot snapshot = harness.strategy.newSnapshot();
+        harness.strategy.snapshotInto(snapshot);
+        final SmartOrderRoutingExecution restored = new SmartOrderRoutingExecution(1L, 1_000L, 8, zeroFees());
+        restored.loadFrom(snapshot);
+
+        assertThat(snapshot.venuePolicyChildSubmissions(Ids.VENUE_COINBASE)).isEqualTo(1L);
+        assertThat(snapshot.venuePolicyAckReports(Ids.VENUE_COINBASE)).isEqualTo(1L);
+        assertThat(snapshot.venuePolicyFillReports(Ids.VENUE_COINBASE)).isEqualTo(1L);
+        assertThat(snapshot.venuePolicyFilledQty(Ids.VENUE_COINBASE)).isEqualTo(25L);
+        assertThat(snapshot.venuePolicyTotalAckLatencyMicros(Ids.VENUE_COINBASE)).isEqualTo(100L);
+        assertThat(snapshot.venuePolicyTotalFillLatencyMicros(Ids.VENUE_COINBASE)).isEqualTo(600L);
+        assertThat(restored.venuePolicyMaxFillLatencyMicros(Ids.VENUE_COINBASE)).isEqualTo(600L);
+        assertThat(harness.orders.getOrder(42_001L).venueId()).isEqualTo(Ids.VENUE_COINBASE);
     }
 
     @Test

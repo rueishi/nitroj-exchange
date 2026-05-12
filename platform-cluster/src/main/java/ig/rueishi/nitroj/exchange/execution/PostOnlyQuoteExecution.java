@@ -236,6 +236,60 @@ public final class PostOnlyQuoteExecution implements ExecutionStrategy {
         return missingCallbackDrops;
     }
 
+    public Snapshot newSnapshot() {
+        return new Snapshot(parentOrderIds.length);
+    }
+
+    public void snapshotInto(final Snapshot snapshot) {
+        System.arraycopy(parentOrderIds, 0, snapshot.parentOrderIds, 0, parentOrderIds.length);
+        System.arraycopy(childClOrdIds, 0, snapshot.childClOrdIds, 0, childClOrdIds.length);
+        System.arraycopy(strategyIds, 0, snapshot.strategyIds, 0, strategyIds.length);
+        System.arraycopy(venueIds, 0, snapshot.venueIds, 0, venueIds.length);
+        System.arraycopy(instrumentIds, 0, snapshot.instrumentIds, 0, instrumentIds.length);
+        System.arraycopy(sides, 0, snapshot.sides, 0, sides.length);
+        System.arraycopy(priceScaled, 0, snapshot.priceScaled, 0, priceScaled.length);
+        System.arraycopy(qtyScaled, 0, snapshot.qtyScaled, 0, qtyScaled.length);
+        System.arraycopy(retryCounts, 0, snapshot.retryCounts, 0, retryCounts.length);
+        System.arraycopy(refreshPending, 0, snapshot.refreshPending, 0, refreshPending.length);
+        System.arraycopy(parentCancelPending, 0, snapshot.parentCancelPending, 0, parentCancelPending.length);
+        snapshot.parentIntents = parentIntents;
+        snapshot.refreshTriggers = refreshTriggers;
+        snapshot.cancelReplaceRequests = cancelReplaceRequests;
+        snapshot.retrySubmissions = retrySubmissions;
+        snapshot.retryExhaustions = retryExhaustions;
+        snapshot.fills = fills;
+        snapshot.parentCancels = parentCancels;
+        snapshot.riskRejects = riskRejects;
+        snapshot.capacityRejects = capacityRejects;
+        snapshot.timerCallbacks = timerCallbacks;
+        snapshot.missingCallbackDrops = missingCallbackDrops;
+    }
+
+    public void loadFrom(final Snapshot snapshot) {
+        System.arraycopy(snapshot.parentOrderIds, 0, parentOrderIds, 0, parentOrderIds.length);
+        System.arraycopy(snapshot.childClOrdIds, 0, childClOrdIds, 0, childClOrdIds.length);
+        System.arraycopy(snapshot.strategyIds, 0, strategyIds, 0, strategyIds.length);
+        System.arraycopy(snapshot.venueIds, 0, venueIds, 0, venueIds.length);
+        System.arraycopy(snapshot.instrumentIds, 0, instrumentIds, 0, instrumentIds.length);
+        System.arraycopy(snapshot.sides, 0, sides, 0, sides.length);
+        System.arraycopy(snapshot.priceScaled, 0, priceScaled, 0, priceScaled.length);
+        System.arraycopy(snapshot.qtyScaled, 0, qtyScaled, 0, qtyScaled.length);
+        System.arraycopy(snapshot.retryCounts, 0, retryCounts, 0, retryCounts.length);
+        System.arraycopy(snapshot.refreshPending, 0, refreshPending, 0, refreshPending.length);
+        System.arraycopy(snapshot.parentCancelPending, 0, parentCancelPending, 0, parentCancelPending.length);
+        parentIntents = snapshot.parentIntents;
+        refreshTriggers = snapshot.refreshTriggers;
+        cancelReplaceRequests = snapshot.cancelReplaceRequests;
+        retrySubmissions = snapshot.retrySubmissions;
+        retryExhaustions = snapshot.retryExhaustions;
+        fills = snapshot.fills;
+        parentCancels = snapshot.parentCancels;
+        riskRejects = snapshot.riskRejects;
+        capacityRejects = snapshot.capacityRejects;
+        timerCallbacks = snapshot.timerCallbacks;
+        missingCallbackDrops = snapshot.missingCallbackDrops;
+    }
+
     private void requestCancelReplace(final int slot) {
         cancelReplaceRequests++;
         refreshPending[slot] = true;
@@ -409,5 +463,60 @@ public final class PostOnlyQuoteExecution implements ExecutionStrategy {
         if (ctx == null) {
             throw new IllegalStateException("PostOnlyQuoteExecution is not initialized");
         }
+    }
+
+    public static final class Snapshot {
+        private final long[] parentOrderIds;
+        private final long[] childClOrdIds;
+        private final int[] strategyIds;
+        private final int[] venueIds;
+        private final int[] instrumentIds;
+        private final byte[] sides;
+        private final long[] priceScaled;
+        private final long[] qtyScaled;
+        private final int[] retryCounts;
+        private final boolean[] refreshPending;
+        private final boolean[] parentCancelPending;
+        private long parentIntents;
+        private long refreshTriggers;
+        private long cancelReplaceRequests;
+        private long retrySubmissions;
+        private long retryExhaustions;
+        private long fills;
+        private long parentCancels;
+        private long riskRejects;
+        private long capacityRejects;
+        private long timerCallbacks;
+        private long missingCallbackDrops;
+
+        private Snapshot(final int capacity) {
+            parentOrderIds = new long[capacity];
+            childClOrdIds = new long[capacity];
+            strategyIds = new int[capacity];
+            venueIds = new int[capacity];
+            instrumentIds = new int[capacity];
+            sides = new byte[capacity];
+            priceScaled = new long[capacity];
+            qtyScaled = new long[capacity];
+            retryCounts = new int[capacity];
+            refreshPending = new boolean[capacity];
+            parentCancelPending = new boolean[capacity];
+        }
+
+        public long parentOrderId(final int index) { return parentOrderIds[index]; }
+        public long childClOrdId(final int index) { return childClOrdIds[index]; }
+        public int retryCount(final int index) { return retryCounts[index]; }
+        public boolean refreshPending(final int index) { return refreshPending[index]; }
+        public long parentIntents() { return parentIntents; }
+        public long refreshTriggers() { return refreshTriggers; }
+        public long cancelReplaceRequests() { return cancelReplaceRequests; }
+        public long retrySubmissions() { return retrySubmissions; }
+        public long retryExhaustions() { return retryExhaustions; }
+        public long fills() { return fills; }
+        public long parentCancels() { return parentCancels; }
+        public long riskRejects() { return riskRejects; }
+        public long capacityRejects() { return capacityRejects; }
+        public long timerCallbacks() { return timerCallbacks; }
+        public long missingCallbackDrops() { return missingCallbackDrops; }
     }
 }

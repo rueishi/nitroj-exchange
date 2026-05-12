@@ -189,6 +189,7 @@ final class DeterministicReplayTest {
         assertThat(first.sorActiveChildren).isEqualTo(1);
         assertThat(first.coinbaseExternalSize).isEqualTo(7L);
         assertThat(first.binanceExternalSize).isEqualTo(11L);
+        assertThat(first.executionSnapshotSummary).isEqualTo("PAR:1/2;SOR:1/2/1;MM:2/0");
     }
 
     private record ReplayEvent(
@@ -321,6 +322,7 @@ final class DeterministicReplayTest {
         long coinbaseExternalSize,
         long binanceExternalSize,
         long capacityRejects,
+        String executionSnapshotSummary,
         List<String> commands) {
     }
 
@@ -391,9 +393,18 @@ final class DeterministicReplayTest {
 
             final ParentOrderRegistry.Snapshot snapshot = registry.newSnapshot();
             registry.snapshotInto(snapshot);
+            final ParallelVenueExecution.Snapshot parallelSnapshot = parallel.newSnapshot();
+            parallel.snapshotInto(parallelSnapshot);
+            final SmartOrderRoutingExecution.Snapshot sorSnapshot = sor.newSnapshot();
+            sor.snapshotInto(sorSnapshot);
+            final PostOnlyQuoteExecution.Snapshot postOnlySnapshot = postOnly.newSnapshot();
+            postOnly.snapshotInto(postOnlySnapshot);
             final ParentOrderRegistry restored = new ParentOrderRegistry(16, 16);
             restored.loadFrom(snapshot);
             commands.add("SNAPSHOT_PARENT:" + restored.lookup(9_100L).parentOrderId());
+            commands.add("EXEC_SNAPSHOT:PAR:" + parallelSnapshot.parentIntents() + "/" + parallelSnapshot.childSubmissions()
+                + ";SOR:" + sorSnapshot.parentIntents() + "/" + sorSnapshot.childSubmissions() + "/" + sorSnapshot.resliceSuccesses()
+                + ";MM:" + postOnlySnapshot.parentIntents() + "/" + postOnlySnapshot.missingCallbackDrops());
 
             final ParentOrderRegistry small = new ParentOrderRegistry(1, 1);
             small.claim(1L, Ids.STRATEGY_INVENTORY_HEDGE, ExecutionStrategyIds.PARALLEL_VENUE, 1L, time);
@@ -410,6 +421,11 @@ final class DeterministicReplayTest {
                 marketView.externalLiquidityView().externalSizeAt(Ids.VENUE_COINBASE, INSTRUMENT, EntryType.BID, 200L),
                 marketView.externalLiquidityView().externalSizeAt(Ids.VENUE_BINANCE, INSTRUMENT, EntryType.BID, 201L),
                 registry.parentCapacityRejects(),
+                commands.stream()
+                    .filter(command -> command.startsWith("EXEC_SNAPSHOT:"))
+                    .findFirst()
+                    .orElse("EXEC_SNAPSHOT:missing")
+                    .substring("EXEC_SNAPSHOT:".length()),
                 List.copyOf(commands));
         }
     }

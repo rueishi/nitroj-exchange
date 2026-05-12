@@ -57,6 +57,19 @@ public final class SmartOrderRoutingExecution implements ExecutionStrategy {
     private final long[] planDepths = new long[MAX_VENUES_PER_SET];
     private final long[] planQtys = new long[MAX_VENUES_PER_SET];
     private final long[] childScratch = new long[MAX_VENUES_PER_SET];
+    private final long[] venuePolicyChildSubmissions = new long[Ids.MAX_VENUES + 1];
+    private final long[] venuePolicyRiskRejects = new long[Ids.MAX_VENUES + 1];
+    private final long[] venuePolicyAckReports = new long[Ids.MAX_VENUES + 1];
+    private final long[] venuePolicyFillReports = new long[Ids.MAX_VENUES + 1];
+    private final long[] venuePolicyRejectReports = new long[Ids.MAX_VENUES + 1];
+    private final long[] venuePolicyCancelReports = new long[Ids.MAX_VENUES + 1];
+    private final long[] venuePolicyFilledQty = new long[Ids.MAX_VENUES + 1];
+    private final long[] venuePolicyTotalAckLatencyMicros = new long[Ids.MAX_VENUES + 1];
+    private final long[] venuePolicyMaxAckLatencyMicros = new long[Ids.MAX_VENUES + 1];
+    private final long[] venuePolicyTotalFillLatencyMicros = new long[Ids.MAX_VENUES + 1];
+    private final long[] venuePolicyMaxFillLatencyMicros = new long[Ids.MAX_VENUES + 1];
+    private final long[] venuePolicyLastSubmitClusterMicros = new long[Ids.MAX_VENUES + 1];
+    private final long[] venuePolicyLastReportClusterMicros = new long[Ids.MAX_VENUES + 1];
 
     private ExecutionStrategyContext ctx;
     private long parentIntents;
@@ -231,6 +244,7 @@ public final class SmartOrderRoutingExecution implements ExecutionStrategy {
         if (slot < 0) {
             return;
         }
+        recordVenuePolicyReport(execution);
         final ExecType execType = execution.execType();
         if (execType == ExecType.REJECTED) {
             ctx.parentOrderRegistry().unlinkChild(execution.childClOrdId());
@@ -306,6 +320,19 @@ public final class SmartOrderRoutingExecution implements ExecutionStrategy {
     public long emptyLiquidityRejects() { return emptyLiquidityRejects; }
     public long allChildrenRejected() { return allChildrenRejected; }
     public long parentCancels() { return parentCancels; }
+    public long venuePolicyChildSubmissions(final int venueId) { return venuePolicyChildSubmissions[venueId]; }
+    public long venuePolicyRiskRejects(final int venueId) { return venuePolicyRiskRejects[venueId]; }
+    public long venuePolicyAckReports(final int venueId) { return venuePolicyAckReports[venueId]; }
+    public long venuePolicyFillReports(final int venueId) { return venuePolicyFillReports[venueId]; }
+    public long venuePolicyRejectReports(final int venueId) { return venuePolicyRejectReports[venueId]; }
+    public long venuePolicyCancelReports(final int venueId) { return venuePolicyCancelReports[venueId]; }
+    public long venuePolicyFilledQty(final int venueId) { return venuePolicyFilledQty[venueId]; }
+    public long venuePolicyTotalAckLatencyMicros(final int venueId) { return venuePolicyTotalAckLatencyMicros[venueId]; }
+    public long venuePolicyMaxAckLatencyMicros(final int venueId) { return venuePolicyMaxAckLatencyMicros[venueId]; }
+    public long venuePolicyTotalFillLatencyMicros(final int venueId) { return venuePolicyTotalFillLatencyMicros[venueId]; }
+    public long venuePolicyMaxFillLatencyMicros(final int venueId) { return venuePolicyMaxFillLatencyMicros[venueId]; }
+    public long venuePolicyLastSubmitClusterMicros(final int venueId) { return venuePolicyLastSubmitClusterMicros[venueId]; }
+    public long venuePolicyLastReportClusterMicros(final int venueId) { return venuePolicyLastReportClusterMicros[venueId]; }
 
     public Snapshot newSnapshot() {
         return new Snapshot(activeParentIds.length);
@@ -326,6 +353,30 @@ public final class SmartOrderRoutingExecution implements ExecutionStrategy {
         System.arraycopy(activeLastResliceMicros, 0, snapshot.activeLastResliceMicros, 0, activeLastResliceMicros.length);
         System.arraycopy(activeGenerations, 0, snapshot.activeGenerations, 0, activeGenerations.length);
         System.arraycopy(activeCancelPending, 0, snapshot.activeCancelPending, 0, activeCancelPending.length);
+        System.arraycopy(venuePolicyChildSubmissions, 0, snapshot.venuePolicyChildSubmissions, 0, venuePolicyChildSubmissions.length);
+        System.arraycopy(venuePolicyRiskRejects, 0, snapshot.venuePolicyRiskRejects, 0, venuePolicyRiskRejects.length);
+        System.arraycopy(venuePolicyAckReports, 0, snapshot.venuePolicyAckReports, 0, venuePolicyAckReports.length);
+        System.arraycopy(venuePolicyFillReports, 0, snapshot.venuePolicyFillReports, 0, venuePolicyFillReports.length);
+        System.arraycopy(venuePolicyRejectReports, 0, snapshot.venuePolicyRejectReports, 0, venuePolicyRejectReports.length);
+        System.arraycopy(venuePolicyCancelReports, 0, snapshot.venuePolicyCancelReports, 0, venuePolicyCancelReports.length);
+        System.arraycopy(venuePolicyFilledQty, 0, snapshot.venuePolicyFilledQty, 0, venuePolicyFilledQty.length);
+        System.arraycopy(venuePolicyTotalAckLatencyMicros, 0, snapshot.venuePolicyTotalAckLatencyMicros, 0, venuePolicyTotalAckLatencyMicros.length);
+        System.arraycopy(venuePolicyMaxAckLatencyMicros, 0, snapshot.venuePolicyMaxAckLatencyMicros, 0, venuePolicyMaxAckLatencyMicros.length);
+        System.arraycopy(venuePolicyTotalFillLatencyMicros, 0, snapshot.venuePolicyTotalFillLatencyMicros, 0, venuePolicyTotalFillLatencyMicros.length);
+        System.arraycopy(venuePolicyMaxFillLatencyMicros, 0, snapshot.venuePolicyMaxFillLatencyMicros, 0, venuePolicyMaxFillLatencyMicros.length);
+        System.arraycopy(venuePolicyLastSubmitClusterMicros, 0, snapshot.venuePolicyLastSubmitClusterMicros, 0, venuePolicyLastSubmitClusterMicros.length);
+        System.arraycopy(venuePolicyLastReportClusterMicros, 0, snapshot.venuePolicyLastReportClusterMicros, 0, venuePolicyLastReportClusterMicros.length);
+        snapshot.parentIntents = parentIntents;
+        snapshot.childSubmissions = childSubmissions;
+        snapshot.resliceAttempts = resliceAttempts;
+        snapshot.resliceSuccesses = resliceSuccesses;
+        snapshot.resliceFailures = resliceFailures;
+        snapshot.resliceIntervalSkips = resliceIntervalSkips;
+        snapshot.capacityRejects = capacityRejects;
+        snapshot.malformedRejects = malformedRejects;
+        snapshot.emptyLiquidityRejects = emptyLiquidityRejects;
+        snapshot.allChildrenRejected = allChildrenRejected;
+        snapshot.parentCancels = parentCancels;
     }
 
     public void loadFrom(final Snapshot snapshot) {
@@ -343,6 +394,30 @@ public final class SmartOrderRoutingExecution implements ExecutionStrategy {
         System.arraycopy(snapshot.activeLastResliceMicros, 0, activeLastResliceMicros, 0, activeLastResliceMicros.length);
         System.arraycopy(snapshot.activeGenerations, 0, activeGenerations, 0, activeGenerations.length);
         System.arraycopy(snapshot.activeCancelPending, 0, activeCancelPending, 0, activeCancelPending.length);
+        System.arraycopy(snapshot.venuePolicyChildSubmissions, 0, venuePolicyChildSubmissions, 0, venuePolicyChildSubmissions.length);
+        System.arraycopy(snapshot.venuePolicyRiskRejects, 0, venuePolicyRiskRejects, 0, venuePolicyRiskRejects.length);
+        System.arraycopy(snapshot.venuePolicyAckReports, 0, venuePolicyAckReports, 0, venuePolicyAckReports.length);
+        System.arraycopy(snapshot.venuePolicyFillReports, 0, venuePolicyFillReports, 0, venuePolicyFillReports.length);
+        System.arraycopy(snapshot.venuePolicyRejectReports, 0, venuePolicyRejectReports, 0, venuePolicyRejectReports.length);
+        System.arraycopy(snapshot.venuePolicyCancelReports, 0, venuePolicyCancelReports, 0, venuePolicyCancelReports.length);
+        System.arraycopy(snapshot.venuePolicyFilledQty, 0, venuePolicyFilledQty, 0, venuePolicyFilledQty.length);
+        System.arraycopy(snapshot.venuePolicyTotalAckLatencyMicros, 0, venuePolicyTotalAckLatencyMicros, 0, venuePolicyTotalAckLatencyMicros.length);
+        System.arraycopy(snapshot.venuePolicyMaxAckLatencyMicros, 0, venuePolicyMaxAckLatencyMicros, 0, venuePolicyMaxAckLatencyMicros.length);
+        System.arraycopy(snapshot.venuePolicyTotalFillLatencyMicros, 0, venuePolicyTotalFillLatencyMicros, 0, venuePolicyTotalFillLatencyMicros.length);
+        System.arraycopy(snapshot.venuePolicyMaxFillLatencyMicros, 0, venuePolicyMaxFillLatencyMicros, 0, venuePolicyMaxFillLatencyMicros.length);
+        System.arraycopy(snapshot.venuePolicyLastSubmitClusterMicros, 0, venuePolicyLastSubmitClusterMicros, 0, venuePolicyLastSubmitClusterMicros.length);
+        System.arraycopy(snapshot.venuePolicyLastReportClusterMicros, 0, venuePolicyLastReportClusterMicros, 0, venuePolicyLastReportClusterMicros.length);
+        parentIntents = snapshot.parentIntents;
+        childSubmissions = snapshot.childSubmissions;
+        resliceAttempts = snapshot.resliceAttempts;
+        resliceSuccesses = snapshot.resliceSuccesses;
+        resliceFailures = snapshot.resliceFailures;
+        resliceIntervalSkips = snapshot.resliceIntervalSkips;
+        capacityRejects = snapshot.capacityRejects;
+        malformedRejects = snapshot.malformedRejects;
+        emptyLiquidityRejects = snapshot.emptyLiquidityRejects;
+        allChildrenRejected = snapshot.allChildrenRejected;
+        parentCancels = snapshot.parentCancels;
     }
 
     private int computeSlicePlan(final int slot, final long quantityScaled) {
@@ -447,15 +522,46 @@ public final class SmartOrderRoutingExecution implements ExecutionStrategy {
             final RiskDecision risk = ctx.riskEngine().preTradeCheck(
                 venueId, activeInstrumentIds[slot], activeSides[slot], price, qty, activeStrategyIds[slot]);
             if (!risk.approved()) {
+                venuePolicyRiskRejects[venueId]++;
                 ctx.parentOrderRegistry().unlinkChild(childClOrdId);
                 continue;
             }
             createChild(parentOrderId, childClOrdId, venueId, activeInstrumentIds[slot],
                 Side.get(activeSides[slot]), price, qty, activeStrategyIds[slot]);
             childSubmissions++;
+            venuePolicyChildSubmissions[venueId]++;
+            venuePolicyLastSubmitClusterMicros[venueId] = ctx.clock().clusterTimeMicros();
             submitted++;
         }
         return submitted;
+    }
+
+    private void recordVenuePolicyReport(final ChildExecutionView execution) {
+        final int venueId = execution.venueId();
+        if (venueId <= 0 || venueId > Ids.MAX_VENUES) {
+            return;
+        }
+        final long reportClusterMicros = ctx.clock().clusterTimeMicros();
+        venuePolicyLastReportClusterMicros[venueId] = reportClusterMicros;
+        final long submitClusterMicros = venuePolicyLastSubmitClusterMicros[venueId];
+        final long latencyMicros = submitClusterMicros == 0L ? 0L : Math.max(0L, reportClusterMicros - submitClusterMicros);
+        switch (execution.execType()) {
+            case NEW -> {
+                venuePolicyAckReports[venueId]++;
+                venuePolicyTotalAckLatencyMicros[venueId] += latencyMicros;
+                venuePolicyMaxAckLatencyMicros[venueId] = Math.max(venuePolicyMaxAckLatencyMicros[venueId], latencyMicros);
+            }
+            case FILL, PARTIAL_FILL -> {
+                venuePolicyFillReports[venueId]++;
+                venuePolicyFilledQty[venueId] += execution.fillQtyScaled();
+                venuePolicyTotalFillLatencyMicros[venueId] += latencyMicros;
+                venuePolicyMaxFillLatencyMicros[venueId] = Math.max(venuePolicyMaxFillLatencyMicros[venueId], latencyMicros);
+            }
+            case REJECTED -> venuePolicyRejectReports[venueId]++;
+            case CANCELED, EXPIRED -> venuePolicyCancelReports[venueId]++;
+            default -> {
+            }
+        }
     }
 
     private boolean planDiffers(final int slot, final int planCount) {
@@ -622,6 +728,30 @@ public final class SmartOrderRoutingExecution implements ExecutionStrategy {
         private final long[] activeLastResliceMicros;
         private final int[] activeGenerations;
         private final boolean[] activeCancelPending;
+        private final long[] venuePolicyChildSubmissions;
+        private final long[] venuePolicyRiskRejects;
+        private final long[] venuePolicyAckReports;
+        private final long[] venuePolicyFillReports;
+        private final long[] venuePolicyRejectReports;
+        private final long[] venuePolicyCancelReports;
+        private final long[] venuePolicyFilledQty;
+        private final long[] venuePolicyTotalAckLatencyMicros;
+        private final long[] venuePolicyMaxAckLatencyMicros;
+        private final long[] venuePolicyTotalFillLatencyMicros;
+        private final long[] venuePolicyMaxFillLatencyMicros;
+        private final long[] venuePolicyLastSubmitClusterMicros;
+        private final long[] venuePolicyLastReportClusterMicros;
+        private long parentIntents;
+        private long childSubmissions;
+        private long resliceAttempts;
+        private long resliceSuccesses;
+        private long resliceFailures;
+        private long resliceIntervalSkips;
+        private long capacityRejects;
+        private long malformedRejects;
+        private long emptyLiquidityRejects;
+        private long allChildrenRejected;
+        private long parentCancels;
 
         private Snapshot(final int capacity) {
             activeParentIds = new long[capacity];
@@ -638,9 +768,48 @@ public final class SmartOrderRoutingExecution implements ExecutionStrategy {
             activeLastResliceMicros = new long[capacity];
             activeGenerations = new int[capacity];
             activeCancelPending = new boolean[capacity];
+            venuePolicyChildSubmissions = new long[Ids.MAX_VENUES + 1];
+            venuePolicyRiskRejects = new long[Ids.MAX_VENUES + 1];
+            venuePolicyAckReports = new long[Ids.MAX_VENUES + 1];
+            venuePolicyFillReports = new long[Ids.MAX_VENUES + 1];
+            venuePolicyRejectReports = new long[Ids.MAX_VENUES + 1];
+            venuePolicyCancelReports = new long[Ids.MAX_VENUES + 1];
+            venuePolicyFilledQty = new long[Ids.MAX_VENUES + 1];
+            venuePolicyTotalAckLatencyMicros = new long[Ids.MAX_VENUES + 1];
+            venuePolicyMaxAckLatencyMicros = new long[Ids.MAX_VENUES + 1];
+            venuePolicyTotalFillLatencyMicros = new long[Ids.MAX_VENUES + 1];
+            venuePolicyMaxFillLatencyMicros = new long[Ids.MAX_VENUES + 1];
+            venuePolicyLastSubmitClusterMicros = new long[Ids.MAX_VENUES + 1];
+            venuePolicyLastReportClusterMicros = new long[Ids.MAX_VENUES + 1];
         }
 
         public long activeParentId(final int index) { return activeParentIds[index]; }
         public long activeLastResliceMicros(final int index) { return activeLastResliceMicros[index]; }
+        public long activeTimerCorrelationId(final int index) { return activeTimerCorrelationIds[index]; }
+        public int activeGeneration(final int index) { return activeGenerations[index]; }
+        public long parentIntents() { return parentIntents; }
+        public long childSubmissions() { return childSubmissions; }
+        public long resliceAttempts() { return resliceAttempts; }
+        public long resliceSuccesses() { return resliceSuccesses; }
+        public long resliceFailures() { return resliceFailures; }
+        public long resliceIntervalSkips() { return resliceIntervalSkips; }
+        public long capacityRejects() { return capacityRejects; }
+        public long malformedRejects() { return malformedRejects; }
+        public long emptyLiquidityRejects() { return emptyLiquidityRejects; }
+        public long allChildrenRejected() { return allChildrenRejected; }
+        public long parentCancels() { return parentCancels; }
+        public long venuePolicyChildSubmissions(final int venueId) { return venuePolicyChildSubmissions[venueId]; }
+        public long venuePolicyRiskRejects(final int venueId) { return venuePolicyRiskRejects[venueId]; }
+        public long venuePolicyAckReports(final int venueId) { return venuePolicyAckReports[venueId]; }
+        public long venuePolicyFillReports(final int venueId) { return venuePolicyFillReports[venueId]; }
+        public long venuePolicyRejectReports(final int venueId) { return venuePolicyRejectReports[venueId]; }
+        public long venuePolicyCancelReports(final int venueId) { return venuePolicyCancelReports[venueId]; }
+        public long venuePolicyFilledQty(final int venueId) { return venuePolicyFilledQty[venueId]; }
+        public long venuePolicyTotalAckLatencyMicros(final int venueId) { return venuePolicyTotalAckLatencyMicros[venueId]; }
+        public long venuePolicyMaxAckLatencyMicros(final int venueId) { return venuePolicyMaxAckLatencyMicros[venueId]; }
+        public long venuePolicyTotalFillLatencyMicros(final int venueId) { return venuePolicyTotalFillLatencyMicros[venueId]; }
+        public long venuePolicyMaxFillLatencyMicros(final int venueId) { return venuePolicyMaxFillLatencyMicros[venueId]; }
+        public long venuePolicyLastSubmitClusterMicros(final int venueId) { return venuePolicyLastSubmitClusterMicros[venueId]; }
+        public long venuePolicyLastReportClusterMicros(final int venueId) { return venuePolicyLastReportClusterMicros[venueId]; }
     }
 }

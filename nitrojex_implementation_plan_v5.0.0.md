@@ -28,7 +28,7 @@ and parent/child terminal state.
 - Do not modify frozen V10, V11, V12, or V13 baseline artifacts.
 - Do not reuse TASK-001 through TASK-318.
 - V14 task cards start at TASK-401.
-- Preserve V13 deterministic replay, parent registry semantics, snapshot/load mechanics, hot-path allocation policy, benchmark gates, simulator live-wire gates, and production preflight.
+- Preserve V13 deterministic replay, parent registry semantics, base snapshot/load mechanics, hot-path allocation policy, benchmark gates, simulator live-wire gates, and production preflight. V14 additionally requires execution-strategy engine state, execution-strategy plugin state, and all relevant execution-strategy stats to participate in Aeron Cluster snapshot/load, replay/restart, and rebuild validation.
 - Preserve V12 deterministic replay, hot-path allocation policy, benchmark gates, simulator live-wire gates, REST-boundary policy, and production preflight.
 - Preserve V11 venue plugin and FIX protocol plugin separation.
 - Add the second venue (Binance) without modifying Coinbase code, V13 execution strategies, V13 trading strategies, or shared FIX 4.4 protocol plugin code.
@@ -114,7 +114,7 @@ AC-V14-PARALLEL-004 `ParallelVenueExecution` aggregates child fills onto parent 
 
 AC-V14-PARALLEL-005 `ParallelVenueExecution` does not re-slice on market-data tick. Re-slicing logic, fee weighting, fill-quality feedback, and latency weighting are explicit non-features.
 
-AC-V14-PARALLEL-006 `ParallelVenueExecution` parent and child lifecycle is replay-deterministic and supports snapshot/load.
+AC-V14-PARALLEL-006 `ParallelVenueExecution` parent and child lifecycle is replay-deterministic and supports snapshot/load of plugin-owned active parent state, child counts, filled/rejected quantities, cancel-pending flags, timer correlation IDs, and relevant execution counters.
 
 ## Smart Order Routing Execution
 
@@ -135,9 +135,11 @@ AC-V14-SOR-004 `SmartOrderRoutingExecution` enforces a configured minimum cluste
 
 AC-V14-SOR-005 `SmartOrderRoutingExecution` terminates parents with primitive reason codes including the V14-specific `RESLICE_FAILED` in addition to the `ParallelVenueExecution` reason set.
 
-AC-V14-SOR-006 `SmartOrderRoutingExecution` does not implement venue latency weighting, fill-quality feedback, or fill-probability modeling. The fee schedule is loaded once at startup; it does not update from REST during normal operation.
+AC-V14-SOR-006 `SmartOrderRoutingExecution` does not use venue latency weighting, fill-quality feedback, or fill-probability modeling for V14 routing decisions. The fee schedule is loaded once at startup; it does not update from REST during normal operation.
 
-AC-V14-SOR-007 `SmartOrderRoutingExecution` parent and child lifecycle is replay-deterministic and supports snapshot/load.
+AC-V14-SOR-007 `SmartOrderRoutingExecution` parent and child lifecycle is replay-deterministic and supports snapshot/load of plugin-owned active parent state, routing/slice state, re-slice generations, last re-slice cluster time, timer correlation IDs, cancel-pending flags, filled/rejected quantities, relevant execution counters, and bounded per-venue future-policy inputs.
+
+AC-V14-SOR-008 `SmartOrderRoutingExecution` records deterministic, observational future-policy inputs per venue without changing V14 routing decisions: child submissions, risk rejects, acknowledgement reports, fill reports, reject reports, cancel/expire reports, filled quantity, submit-to-ack latency totals/maxima, submit-to-fill latency totals/maxima, and last submit/report cluster times. These fields must be snapshot/load covered and replay deterministic.
 
 ## Compatibility Matrix
 
@@ -158,6 +160,14 @@ AC-V14-DET-002 V14 timer rules inherit V13 §9 (owner registration before schedu
 AC-V14-DET-003 Re-slice cancel-and-resubmit ordering is deterministic. Cancel commands precede new submissions in cluster ordering. Re-slice failure leaves no orphaned working child.
 
 AC-V14-DET-004 Wall-clock callbacks are forbidden in `InventoryHedgeStrategy`, `ParallelVenueExecution`, and `SmartOrderRoutingExecution`. All time queries use `ctx.clock()`.
+
+AC-V14-SNAPSHOT-001 Aeron Cluster snapshots include all execution-strategy engine state and relevant stats that affect behavior, audit, recovery, replay equivalence, parent/child routing, or timer dispatch: dispatch counters, reject counters, active timer-owner correlation IDs, and owning execution-strategy IDs.
+
+AC-V14-SNAPSHOT-002 Aeron Cluster snapshots include all execution-strategy plugin state and relevant stats for active parents: active parent slots, child counts or IDs, cancel-pending flags, retry counts, re-slice generations, filled/rejected quantities, timer correlation IDs, routing/slice state, last re-slice cluster time, terminal bookkeeping, counters such as risk rejects, capacity rejects, malformed rejects, timer firings, residual cancels, all-children-rejected, retry exhaustions, re-slice attempts/successes/failures, and bounded future SOR policy inputs.
+
+AC-V14-SNAPSHOT-003 Startup restore order is explicitly validated as latest Aeron Cluster snapshot, then ordered cluster log replay after the snapshot, then venue/order/position reconciliation, then rebuild of explicitly ephemeral telemetry before execution strategies emit new child orders.
+
+AC-V14-SNAPSHOT-004 Snapshot plus replay reaches the same parent state, child command sequence, execution-strategy timer-owner table, execution-strategy plugin counters, and execution-strategy engine counters as uninterrupted replay for active `PostOnlyQuoteExecution`, `MultiLegContingentExecution`, `ParallelVenueExecution`, and `SmartOrderRoutingExecution` scenarios.
 
 ## Allocation and Latency Evidence
 
@@ -211,6 +221,9 @@ For every new or modified production behavior, the task must add or update autom
     safe-drop, reject, status-code, terminal-reason, and counter behavior where
       expected failure is possible
     snapshot/load/recovery where persistent or replayed state is involved
+    execution-strategy engine/plugin snapshot and restart coverage where
+      execution state, timer owners, parent/child routing, or stats can affect
+      behavior, audit, recovery, or replay equivalence
     deterministic replay where parent state, child state, strategy output,
       counters, or ordering changes
     integration where behavior crosses strategy, execution engine, parent
@@ -510,7 +523,7 @@ Harden the shared execution-strategy plugin lifecycle model before activating pa
 - Satisfies the mandatory task-owned coverage contract in Section 2.
 - AC-V14-XVENUE-005
 - `PostOnlyQuoteExecution` tracks bounded per-parent/per-child state and no longer uses singleton active-parent fields for lifecycle ownership.
-- Tests cover two simultaneous quote parents from one market-making instance, four simultaneous quote parents across Coinbase and Binance market-making instances, venue-scoped market-data refresh, parent cancel scoped to one parent, post-only reject retry scoped to one parent, final fill scoped to one parent, missing parent/child callback safe-drop or counter behavior, capacity full, deterministic replay, and snapshot/load behavior through the existing parent/order registries.
+- Tests cover two simultaneous quote parents from one market-making instance, four simultaneous quote parents across Coinbase and Binance market-making instances, venue-scoped market-data refresh, parent cancel scoped to one parent, post-only reject retry scoped to one parent, final fill scoped to one parent, missing parent/child callback safe-drop or counter behavior, capacity full, deterministic replay, and snapshot/load behavior for parent registry, order state, `PostOnlyQuoteExecution` plugin state, and relevant execution counters.
 - V13-to-V14 behavior-equivalence tests confirm single-venue `MarketMakingStrategy` plus `PostOnlyQuoteExecution` behavior is unchanged.
 - JMH proves `PostOnlyQuoteExecution` dispatch and callback hot-path allocation behavior remains at `0 B/op` after warmup.
 - Documentation in code comments identifies the cluster-thread ownership assumption and explains that the per-parent table is for multi-lifecycle correctness, not thread synchronization.
@@ -731,6 +744,8 @@ Expand deterministic replay to include hedge triggers, venue-indifferent parent 
 
 ### Files to Update
 
+    platform-cluster/src/main/java/ig/rueishi/nitroj/exchange/execution/*
+    platform-cluster/src/test/java/ig/rueishi/nitroj/exchange/execution/*
     platform-cluster/src/test/java/ig/rueishi/nitroj/exchange/cluster/DeterministicReplayTest.java
     platform-tooling/src/main/java/ig/rueishi/nitroj/exchange/tooling/replay/*
 
@@ -738,7 +753,8 @@ Expand deterministic replay to include hedge triggers, venue-indifferent parent 
 
 - Satisfies the mandatory task-owned coverage contract in Section 2.
 - AC-V14-DET-001 through AC-V14-DET-004
-- Tests cover hedge → ParallelVenue full replay, hedge → SOR full replay including re-slice sequences, cross-venue arb replay with mixed-precision inputs, parallel MM replay across both venues, parent state replay across snapshot/load boundary, capacity-counter determinism, and identical outbound FIX command sequences for both venues under replay.
+- AC-V14-SNAPSHOT-001 through AC-V14-SNAPSHOT-004
+- Tests cover hedge → ParallelVenue full replay, hedge → SOR full replay including re-slice sequences, cross-venue arb replay with mixed-precision inputs, parallel MM replay across both venues, parent state replay across snapshot/load boundary, execution-strategy engine and plugin stats replay across snapshot/load boundary, timer-owner table replay across snapshot/load boundary, capacity-counter determinism, and identical outbound FIX command sequences for both venues under replay.
 
 ## TASK-419 - Venue-Indifferent Snapshot/Recovery Integration
 
@@ -749,6 +765,8 @@ Integrate venue-indifferent parents (hedge with `ParallelVenue` or `SOR`) with s
 ### Files to Update
 
     platform-cluster/src/main/java/ig/rueishi/nitroj/exchange/cluster/*
+    platform-cluster/src/main/java/ig/rueishi/nitroj/exchange/execution/*
+    platform-cluster/src/test/java/ig/rueishi/nitroj/exchange/execution/*
     platform-cluster/src/test/java/*
 
 ### Acceptance Criteria
@@ -758,7 +776,8 @@ Integrate venue-indifferent parents (hedge with `ParallelVenue` or `SOR`) with s
 - AC-V14-HEDGE-006
 - AC-V14-PARALLEL-006
 - AC-V14-SOR-007
-- Tests cover hedge parent snapshot round trip, ParallelVenue parent recovery with active children on both venues, SOR parent recovery with pending re-slice timer, SOR parent recovery during cancel-and-resubmit, reconciliation mismatch with hedge parent active, kill-switch on unreconciled hedge parent risk, and operational counters for hedge/ParallelVenue/SOR.
+- AC-V14-SNAPSHOT-001 through AC-V14-SNAPSHOT-004
+- Tests cover hedge parent snapshot round trip, execution-strategy engine snapshot/load round trip, relevant execution-strategy stats snapshot/load round trip, timer-owner table snapshot/load round trip, ParallelVenue parent recovery with active children on both venues, SOR parent recovery with pending re-slice timer, SOR parent recovery during cancel-and-resubmit, reconciliation mismatch with hedge parent active, kill-switch on unreconciled hedge parent risk, and operational counters for hedge/ParallelVenue/SOR.
 
 ## TASK-420 - Cross-Venue Arb Live-Wire E2E
 

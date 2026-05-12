@@ -177,15 +177,23 @@ final class MultiLegContingentExecutionTest {
     @Test
     void snapshotLoad_restoresParentAndLegLinks() {
         final Harness harness = submitted(false);
+        harness.strategy.onChildExecution(child(fill(LEG1_ID, QTY / 2, QTY / 2, QTY / 2, false, "f1"), PARENT_ID));
         final ParentOrderRegistry.Snapshot snapshot = harness.registry.newSnapshot();
         harness.registry.snapshotInto(snapshot);
+        final MultiLegContingentExecution.Snapshot strategySnapshot = harness.strategy.newSnapshot();
+        harness.strategy.snapshotInto(strategySnapshot);
 
         final ParentOrderRegistry restored = new ParentOrderRegistry(8, 8);
         restored.loadFrom(snapshot);
+        final MultiLegContingentExecution restoredStrategy = new MultiLegContingentExecution();
+        restoredStrategy.loadFrom(strategySnapshot);
 
-        assertThat(restored.lookup(PARENT_ID).status()).isEqualTo(ParentOrderState.WORKING);
+        assertThat(restored.lookup(PARENT_ID).status()).isEqualTo(ParentOrderState.PARTIALLY_FILLED);
         assertThat(restored.parentOrderIdByChild(LEG1_ID)).isEqualTo(PARENT_ID);
         assertThat(restored.parentOrderIdByChild(LEG2_ID)).isEqualTo(PARENT_ID);
+        assertThat(strategySnapshot.parentOrderId()).isEqualTo(PARENT_ID);
+        assertThat(strategySnapshot.leg1FillQtyScaled()).isEqualTo(QTY / 2);
+        assertThat(restoredStrategy.timerCorrelationId()).isEqualTo(strategySnapshot.timerCorrelationId());
     }
 
     @Test

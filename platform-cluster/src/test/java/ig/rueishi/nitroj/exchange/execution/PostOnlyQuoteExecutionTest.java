@@ -285,12 +285,21 @@ final class PostOnlyQuoteExecutionTest {
         final Harness harness = submittedHarness(RiskDecision.APPROVED, 4, 4);
         final ParentOrderRegistry.Snapshot snapshot = harness.registry.newSnapshot();
         harness.registry.snapshotInto(snapshot);
+        harness.strategy.onMarketDataTick(Ids.VENUE_COINBASE, Ids.INSTRUMENT_BTC_USD, 100L);
+        final PostOnlyQuoteExecution.Snapshot strategySnapshot = harness.strategy.newSnapshot();
+        harness.strategy.snapshotInto(strategySnapshot);
 
         final ParentOrderRegistry restored = new ParentOrderRegistry(4, 4);
         restored.loadFrom(snapshot);
+        final PostOnlyQuoteExecution restoredStrategy = new PostOnlyQuoteExecution(4);
+        restoredStrategy.loadFrom(strategySnapshot);
 
         assertThat(restored.lookup(PARENT_ID).status()).isEqualTo(ParentOrderState.WORKING);
         assertThat(restored.parentOrderIdByChild(CHILD_ID)).isEqualTo(PARENT_ID);
+        assertThat(strategySnapshot.parentOrderId(0)).isEqualTo(PARENT_ID);
+        assertThat(strategySnapshot.childClOrdId(0)).isEqualTo(CHILD_ID);
+        assertThat(restoredStrategy.refreshTriggers()).isEqualTo(1L);
+        assertThat(restoredStrategy.cancelReplaceRequests()).isEqualTo(1L);
     }
 
     private static Harness submittedHarness(final RiskDecision riskDecision, final int parentCapacity, final int childCapacity) {
