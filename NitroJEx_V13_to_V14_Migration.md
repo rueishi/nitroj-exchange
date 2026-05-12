@@ -39,7 +39,7 @@ V14 also activates capabilities that exist in V13 but had no second venue to ope
     Mixed-precision OwnOrderOverlay, ExternalLiquidityView, and
       ConsolidatedL2Book.
 
-V14 makes no changes to V13 SBE schema, V13 execution strategies, V13 trading strategies, V13 RiskEngine semantics, V13 deterministic replay rules, V13 snapshot/load mechanics, or V13 hot-path allocation policy.
+V14 makes no changes to V13 SBE schema, V13 trading-strategy behavior, V13 RiskEngine semantics, V13 deterministic replay principles, V13 base snapshot/load mechanics, or V13 hot-path allocation policy. V14 tightens the execution-strategy restart contract: execution-strategy engine state, execution-strategy plugin state, timer-owner state, and relevant execution-strategy stats must be present in Aeron Cluster snapshot/load and validated through replay/restart/rebuild.
 
 ---
 

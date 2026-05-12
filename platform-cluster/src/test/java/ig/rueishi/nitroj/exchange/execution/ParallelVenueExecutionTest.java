@@ -108,6 +108,11 @@ final class ParallelVenueExecutionTest {
         final ParallelVenueExecution restored = new ParallelVenueExecution(1L, 8);
         restored.loadFrom(snapshot);
         assertThat(snapshot.activeParentId(0)).isEqualTo(7L);
+        assertThat(snapshot.activeChildCount(0)).isEqualTo(1);
+        assertThat(snapshot.activeTimerCorrelationId(0)).isEqualTo(17_000L);
+        assertThat(restored.parentIntents()).isEqualTo(1L);
+        assertThat(restored.childSubmissions()).isEqualTo(1L);
+        assertThat(restored.timerSchedules()).isEqualTo(1L);
 
         harness.strategy.onChildExecution(new ChildExecutionView().wrap(exec(7_001L, ExecType.FILL, QTY, 0L, true), 7L));
         assertThat(harness.parents.lookup(7L).status()).isEqualTo(ParentOrderState.DONE);

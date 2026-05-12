@@ -191,6 +191,42 @@ final class ExecutionStrategyEngineTest {
         assertThat(strategyContext.executionEngine()).isSameAs(harness.engine);
     }
 
+    @Test
+    void snapshotLoadPreservesCountersAndTimerOwnerTableAcrossRestartBoundary() {
+        final Harness source = harness(4);
+        source.parentRegistry.claim(9001L, 7, 2, 100L, 1L);
+
+        assertThat(source.engine.submit(parentIntent(1001L, 7, 2))).isTrue();
+        assertThat(source.engine.submit(parentIntent(1002L, 7, 3))).isFalse();
+        assertThat(source.engine.submit(parentIntent(1003L, 8, 2))).isFalse();
+        assertThat(source.engine.onChildExecution(execution(55L), 9001L)).isTrue();
+        assertThat(source.engine.cancelParent(9001L, ParentOrderState.REASON_CANCELED_BY_PARENT)).isTrue();
+        source.engine.onMarketDataTick(1, 11, 123L);
+        assertThat(source.engine.registerTimerOwner(77L, 2)).isTrue();
+        assertThat(source.engine.onTimer(99L)).isFalse();
+
+        final ExecutionStrategyEngine.Snapshot snapshot = source.engine.newSnapshot();
+        source.engine.snapshotInto(snapshot);
+
+        final Harness restored = harness(4);
+        restored.engine.loadFrom(snapshot);
+
+        assertThat(restored.engine.parentIntentDispatches()).isEqualTo(1L);
+        assertThat(restored.engine.childExecutionDispatches()).isEqualTo(1L);
+        assertThat(restored.engine.cancelDispatches()).isEqualTo(1L);
+        assertThat(restored.engine.marketDataDispatches()).isEqualTo(1L);
+        assertThat(restored.engine.unknownExecutionStrategyRejects()).isEqualTo(1L);
+        assertThat(restored.engine.incompatibleExecutionStrategyRejects()).isEqualTo(1L);
+        assertThat(restored.engine.unknownTimerRejects()).isEqualTo(1L);
+        assertThat(snapshot.timerActive(0)).isTrue();
+        assertThat(snapshot.timerCorrelationId(0)).isEqualTo(77L);
+        assertThat(snapshot.timerExecutionStrategyId(0)).isEqualTo(2);
+
+        assertThat(restored.engine.onTimer(77L)).isTrue();
+        assertThat(restored.strategy.events).containsExactly("timer:77");
+        assertThat(restored.engine.timerDispatches()).isEqualTo(1L);
+    }
+
     private static Harness harness(final int timerCapacity) {
         final ParentOrderRegistry parentRegistry = new ParentOrderRegistry(8, 8);
         final ExecutionStrategyContext context = new ExecutionStrategyContext(

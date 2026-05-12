@@ -251,6 +251,50 @@ public final class ExecutionStrategyEngine {
         return unknownTimerRejects;
     }
 
+    public Snapshot newSnapshot() {
+        return new Snapshot(timerActive.length);
+    }
+
+    public void snapshotInto(final Snapshot snapshot) {
+        Objects.requireNonNull(snapshot, "snapshot");
+        if (snapshot.timerCorrelationIds.length != timerCorrelationIds.length) {
+            throw new IllegalArgumentException("snapshot timer capacity mismatch");
+        }
+        System.arraycopy(timerCorrelationIds, 0, snapshot.timerCorrelationIds, 0, timerCorrelationIds.length);
+        System.arraycopy(timerExecutionStrategyIds, 0, snapshot.timerExecutionStrategyIds, 0, timerExecutionStrategyIds.length);
+        System.arraycopy(timerActive, 0, snapshot.timerActive, 0, timerActive.length);
+        snapshot.parentIntentDispatches = parentIntentDispatches;
+        snapshot.childExecutionDispatches = childExecutionDispatches;
+        snapshot.timerDispatches = timerDispatches;
+        snapshot.cancelDispatches = cancelDispatches;
+        snapshot.marketDataDispatches = marketDataDispatches;
+        snapshot.unknownExecutionStrategyRejects = unknownExecutionStrategyRejects;
+        snapshot.incompatibleExecutionStrategyRejects = incompatibleExecutionStrategyRejects;
+        snapshot.missingParentRejects = missingParentRejects;
+        snapshot.timerCapacityRejects = timerCapacityRejects;
+        snapshot.unknownTimerRejects = unknownTimerRejects;
+    }
+
+    public void loadFrom(final Snapshot snapshot) {
+        Objects.requireNonNull(snapshot, "snapshot");
+        if (snapshot.timerCorrelationIds.length != timerCorrelationIds.length) {
+            throw new IllegalArgumentException("snapshot timer capacity mismatch");
+        }
+        System.arraycopy(snapshot.timerCorrelationIds, 0, timerCorrelationIds, 0, timerCorrelationIds.length);
+        System.arraycopy(snapshot.timerExecutionStrategyIds, 0, timerExecutionStrategyIds, 0, timerExecutionStrategyIds.length);
+        System.arraycopy(snapshot.timerActive, 0, timerActive, 0, timerActive.length);
+        parentIntentDispatches = snapshot.parentIntentDispatches;
+        childExecutionDispatches = snapshot.childExecutionDispatches;
+        timerDispatches = snapshot.timerDispatches;
+        cancelDispatches = snapshot.cancelDispatches;
+        marketDataDispatches = snapshot.marketDataDispatches;
+        unknownExecutionStrategyRejects = snapshot.unknownExecutionStrategyRejects;
+        incompatibleExecutionStrategyRejects = snapshot.incompatibleExecutionStrategyRejects;
+        missingParentRejects = snapshot.missingParentRejects;
+        timerCapacityRejects = snapshot.timerCapacityRejects;
+        unknownTimerRejects = snapshot.unknownTimerRejects;
+    }
+
     private void emitUnreportedTerminalCallbacks() {
         final ParentOrderState[] states = context.parentOrderRegistry().statesForEngine();
         for (ParentOrderState state : states) {
@@ -288,5 +332,41 @@ public final class ExecutionStrategyEngine {
         ParentCallbackSink NO_OP = decoder -> { };
 
         void onParentTerminal(ParentOrderTerminalDecoder decoder);
+    }
+
+    public static final class Snapshot {
+        private final long[] timerCorrelationIds;
+        private final int[] timerExecutionStrategyIds;
+        private final boolean[] timerActive;
+        private long parentIntentDispatches;
+        private long childExecutionDispatches;
+        private long timerDispatches;
+        private long cancelDispatches;
+        private long marketDataDispatches;
+        private long unknownExecutionStrategyRejects;
+        private long incompatibleExecutionStrategyRejects;
+        private long missingParentRejects;
+        private long timerCapacityRejects;
+        private long unknownTimerRejects;
+
+        private Snapshot(final int timerCapacity) {
+            timerCorrelationIds = new long[timerCapacity];
+            timerExecutionStrategyIds = new int[timerCapacity];
+            timerActive = new boolean[timerCapacity];
+        }
+
+        public boolean timerActive(final int index) { return timerActive[index]; }
+        public long timerCorrelationId(final int index) { return timerCorrelationIds[index]; }
+        public int timerExecutionStrategyId(final int index) { return timerExecutionStrategyIds[index]; }
+        public long parentIntentDispatches() { return parentIntentDispatches; }
+        public long childExecutionDispatches() { return childExecutionDispatches; }
+        public long timerDispatches() { return timerDispatches; }
+        public long cancelDispatches() { return cancelDispatches; }
+        public long marketDataDispatches() { return marketDataDispatches; }
+        public long unknownExecutionStrategyRejects() { return unknownExecutionStrategyRejects; }
+        public long incompatibleExecutionStrategyRejects() { return incompatibleExecutionStrategyRejects; }
+        public long missingParentRejects() { return missingParentRejects; }
+        public long timerCapacityRejects() { return timerCapacityRejects; }
+        public long unknownTimerRejects() { return unknownTimerRejects; }
     }
 }

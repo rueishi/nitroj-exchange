@@ -257,6 +257,16 @@ public final class ParallelVenueExecution implements ExecutionStrategy {
         System.arraycopy(activeFilledQty, 0, snapshot.activeFilledQty, 0, activeFilledQty.length);
         System.arraycopy(activeTimerCorrelationIds, 0, snapshot.activeTimerCorrelationIds, 0, activeTimerCorrelationIds.length);
         System.arraycopy(activeCancelPending, 0, snapshot.activeCancelPending, 0, activeCancelPending.length);
+        snapshot.parentIntents = parentIntents;
+        snapshot.childSubmissions = childSubmissions;
+        snapshot.timerSchedules = timerSchedules;
+        snapshot.timerFirings = timerFirings;
+        snapshot.parentCancels = parentCancels;
+        snapshot.capacityRejects = capacityRejects;
+        snapshot.allChildrenRejected = allChildrenRejected;
+        snapshot.residualCancels = residualCancels;
+        snapshot.malformedRejects = malformedRejects;
+        snapshot.emptyLiquidityRejects = emptyLiquidityRejects;
     }
 
     public void loadFrom(final Snapshot snapshot) {
@@ -266,6 +276,16 @@ public final class ParallelVenueExecution implements ExecutionStrategy {
         System.arraycopy(snapshot.activeFilledQty, 0, activeFilledQty, 0, activeFilledQty.length);
         System.arraycopy(snapshot.activeTimerCorrelationIds, 0, activeTimerCorrelationIds, 0, activeTimerCorrelationIds.length);
         System.arraycopy(snapshot.activeCancelPending, 0, activeCancelPending, 0, activeCancelPending.length);
+        parentIntents = snapshot.parentIntents;
+        childSubmissions = snapshot.childSubmissions;
+        timerSchedules = snapshot.timerSchedules;
+        timerFirings = snapshot.timerFirings;
+        parentCancels = snapshot.parentCancels;
+        capacityRejects = snapshot.capacityRejects;
+        allChildrenRejected = snapshot.allChildrenRejected;
+        residualCancels = snapshot.residualCancels;
+        malformedRejects = snapshot.malformedRejects;
+        emptyLiquidityRejects = snapshot.emptyLiquidityRejects;
     }
 
     public Snapshot newSnapshot() {
@@ -459,6 +479,16 @@ public final class ParallelVenueExecution implements ExecutionStrategy {
         private final long[] activeFilledQty;
         private final long[] activeTimerCorrelationIds;
         private final boolean[] activeCancelPending;
+        private long parentIntents;
+        private long childSubmissions;
+        private long timerSchedules;
+        private long timerFirings;
+        private long parentCancels;
+        private long capacityRejects;
+        private long allChildrenRejected;
+        private long residualCancels;
+        private long malformedRejects;
+        private long emptyLiquidityRejects;
 
         private Snapshot(final int capacity) {
             activeParentIds = new long[capacity];
@@ -472,5 +502,19 @@ public final class ParallelVenueExecution implements ExecutionStrategy {
         public long activeParentId(final int index) {
             return activeParentIds[index];
         }
+
+        public int activeChildCount(final int index) { return activeChildCounts[index]; }
+        public long activeFilledQty(final int index) { return activeFilledQty[index]; }
+        public long activeTimerCorrelationId(final int index) { return activeTimerCorrelationIds[index]; }
+        public long parentIntents() { return parentIntents; }
+        public long childSubmissions() { return childSubmissions; }
+        public long timerSchedules() { return timerSchedules; }
+        public long timerFirings() { return timerFirings; }
+        public long parentCancels() { return parentCancels; }
+        public long capacityRejects() { return capacityRejects; }
+        public long allChildrenRejected() { return allChildrenRejected; }
+        public long residualCancels() { return residualCancels; }
+        public long malformedRejects() { return malformedRejects; }
+        public long emptyLiquidityRejects() { return emptyLiquidityRejects; }
     }
 }
